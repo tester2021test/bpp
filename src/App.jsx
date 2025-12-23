@@ -1,439 +1,568 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Home, RefreshCw, Trophy, ArrowLeft, Star, Grid3X3, Shapes, Brain, Maximize } from 'lucide-react';
 
-// Improved Audio Engine for "Pop" sounds
-const playPopSound = (ctx, index) => {
-  if (!ctx) return;
-  
-  try {
-    const osc = ctx.createOscillator();
-    const gainNode = ctx.createGain();
-    
-    osc.connect(gainNode);
-    gainNode.connect(ctx.destination);
-    
-    // Pentatonic scale (C major pentatonic)
-    const scale = [
-      261.63, 293.66, 329.63, 392.00, 440.00, 
-      523.25, 587.33, 659.25, 783.99, 880.00
-    ];
-    
-    const note = scale[index % scale.length];
-    
-    // "Pop" characteristic: Triangle wave + Pitch Bend
-    osc.type = 'triangle';
-    osc.frequency.setValueAtTime(note, ctx.currentTime);
-    // Rapidly drop pitch by an octave to simulate the "pop" tension release
-    osc.frequency.exponentialRampToValueAtTime(note * 0.5, ctx.currentTime + 0.1);
-    
-    // Envelope for a crisp, short sound
-    gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
-    
-    osc.start();
-    osc.stop(ctx.currentTime + 0.1);
-  } catch (e) {
-    console.error("Audio error", e);
-  }
-};
+// --- Shared Components ---
 
-const BalloonGame = () => {
-  const canvasRef = useRef(null);
-  const containerRef = useRef(null);
-  const audioCtxRef = useRef(null); // Persistent Audio Context
-  const [score, setScore] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const requestRef = useRef();
-  
-  // Game state stored in refs
-  const gameState = useRef({
-    balloons: [],
-    particles: [],
-    clouds: [],
-    lastBalloonTime: 0,
-    width: 0,
-    height: 0,
-    ctx: null
-  });
-
-  const colors = [
-    { fill: '#FF6B6B', string: '#CC5555' }, // Red
-    { fill: '#4ECDC4', string: '#3D9992' }, // Teal
-    { fill: '#FFE66D', string: '#CCB655' }, // Yellow
-    { fill: '#FF9F43', string: '#CC7F35' }, // Orange
-    { fill: '#6C5CE7', string: '#5549B5' }, // Purple
-    { fill: '#A8E6CF', string: '#86B8A5' }, // Mint
-  ];
-
-  const initGame = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    
-    // Force canvas to match window visual viewport to handle mobile bars correctly
-    const width = window.innerWidth;
-    const height = window.innerHeight;
-
-    gameState.current.width = width;
-    gameState.current.height = height;
-    
-    // Handle retina displays
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = width * dpr;
-    canvas.height = height * dpr;
-    
-    // CSS size must match
-    canvas.style.width = `${width}px`;
-    canvas.style.height = `${height}px`;
-    
-    gameState.current.ctx = canvas.getContext('2d');
-    gameState.current.ctx.scale(dpr, dpr);
-    
-    // Reset clouds if empty
-    if (gameState.current.clouds.length === 0) {
-      gameState.current.clouds = [];
-      for(let i=0; i<5; i++) {
-          gameState.current.clouds.push(createCloud(true));
-      }
-    }
+const Button = ({ onClick, children, className = "", variant = "primary" }) => {
+  const baseStyle = "px-4 py-2 md:px-6 md:py-3 rounded-2xl font-bold text-lg transition-all transform hover:scale-105 active:scale-95 shadow-lg flex items-center justify-center gap-2 select-none";
+  const variants = {
+    primary: "bg-blue-500 hover:bg-blue-600 text-white border-b-4 border-blue-700 active:border-b-0 active:translate-y-1",
+    secondary: "bg-purple-500 hover:bg-purple-600 text-white border-b-4 border-purple-700 active:border-b-0 active:translate-y-1",
+    success: "bg-green-500 hover:bg-green-600 text-white border-b-4 border-green-700 active:border-b-0 active:translate-y-1",
+    danger: "bg-red-500 hover:bg-red-600 text-white border-b-4 border-red-700 active:border-b-0 active:translate-y-1",
+    outline: "bg-white text-gray-700 border-2 border-gray-200 hover:bg-gray-50 active:border-b-0 active:translate-y-1"
   };
-
-  const createCloud = (randomY = false) => {
-    const w = gameState.current.width;
-    const h = gameState.current.height;
-    return {
-        x: Math.random() * w,
-        y: randomY ? Math.random() * (h/2) : Math.random() * (h/3),
-        speed: 0.2 + Math.random() * 0.3,
-        size: 0.5 + Math.random() * 0.5,
-        opacity: 0.4 + Math.random() * 0.4
-    };
-  };
-
-  const createBalloon = () => {
-    const w = gameState.current.width;
-    const h = gameState.current.height;
-    const color = colors[Math.floor(Math.random() * colors.length)];
-    // EXTRA LARGE balloons for mobile touch targets (55-95px radius)
-    const size = 55 + Math.random() * 40; 
-    
-    return {
-      x: Math.random() * (w - size*2) + size,
-      y: h + size + 50,
-      radius: size,
-      speed: 1.5 + Math.random() * 2,
-      wobbleOffset: Math.random() * Math.PI * 2,
-      wobbleSpeed: 0.02 + Math.random() * 0.03,
-      color: color,
-      id: Date.now() + Math.random()
-    };
-  };
-
-  const createParticles = (x, y, color) => {
-    for (let i = 0; i < 12; i++) { // More particles!
-      const angle = (Math.PI * 2 * i) / 12;
-      const speed = 3 + Math.random() * 4;
-      gameState.current.particles.push({
-        x,
-        y,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
-        life: 1.0,
-        color: color.fill,
-        size: 8 + Math.random() * 6
-      });
-    }
-  };
-
-  const update = (time) => {
-    if (!isPlaying) return;
-    
-    const state = gameState.current;
-    const ctx = state.ctx;
-    const w = state.width;
-    const h = state.height;
-
-    // Clear screen
-    ctx.clearRect(0, 0, w, h);
-
-    // Draw Sky Gradient
-    const gradient = ctx.createLinearGradient(0, 0, 0, h);
-    gradient.addColorStop(0, '#87CEEB');
-    gradient.addColorStop(1, '#E0F6FF');
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, w, h);
-
-    // Draw Clouds
-    ctx.fillStyle = '#FFFFFF';
-    state.clouds.forEach((cloud) => {
-        cloud.x += cloud.speed;
-        if(cloud.x > w + 100) {
-            cloud.x = -100;
-            cloud.y = Math.random() * (h/3);
-        }
-
-        ctx.globalAlpha = cloud.opacity;
-        ctx.beginPath();
-        ctx.arc(cloud.x, cloud.y, 30 * cloud.size, 0, Math.PI * 2);
-        ctx.arc(cloud.x + 25 * cloud.size, cloud.y - 10 * cloud.size, 35 * cloud.size, 0, Math.PI * 2);
-        ctx.arc(cloud.x + 50 * cloud.size, cloud.y, 30 * cloud.size, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.globalAlpha = 1.0;
-    });
-
-    // Spawn Balloons (Faster spawn rate for more fun)
-    if (time - state.lastBalloonTime > 800) { 
-      state.balloons.push(createBalloon());
-      state.lastBalloonTime = time;
-    }
-
-    // Update and Draw Balloons
-    for (let i = state.balloons.length - 1; i >= 0; i--) {
-      const b = state.balloons[i];
-      b.y -= b.speed;
-      const wobble = Math.sin(time * 0.003 + b.wobbleOffset) * 1;
-      
-      if (b.y < -150) {
-        state.balloons.splice(i, 1);
-        continue;
-      }
-
-      // Draw String
-      ctx.beginPath();
-      ctx.moveTo(b.x + wobble, b.y + b.radius);
-      ctx.quadraticCurveTo(
-        b.x + wobble + Math.sin(time * 0.01) * 10, 
-        b.y + b.radius + 30, 
-        b.x + wobble, 
-        b.y + b.radius + 60
-      );
-      ctx.strokeStyle = '#888';
-      ctx.lineWidth = 3;
-      ctx.stroke();
-
-      // Draw Balloon
-      ctx.beginPath();
-      ctx.ellipse(b.x + wobble, b.y, b.radius, b.radius * 1.15, 0, 0, Math.PI * 2);
-      ctx.fillStyle = b.color.fill;
-      ctx.fill();
-      
-      // Shine
-      ctx.beginPath();
-      ctx.ellipse(b.x + wobble - b.radius*0.3, b.y - b.radius*0.3, b.radius*0.1, b.radius*0.2, -0.5, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255,255,255,0.3)';
-      ctx.fill();
-      
-      // Knot
-      ctx.beginPath();
-      ctx.fillStyle = b.color.fill;
-      ctx.moveTo(b.x + wobble - 8, b.y + b.radius * 1.1);
-      ctx.lineTo(b.x + wobble + 8, b.y + b.radius * 1.1);
-      ctx.lineTo(b.x + wobble, b.y + b.radius * 1.1 + 12);
-      ctx.fill();
-    }
-
-    // Update Particles
-    for (let i = state.particles.length - 1; i >= 0; i--) {
-      const p = state.particles[i];
-      p.x += p.vx;
-      p.y += p.vy;
-      p.vy += 0.2; // Stronger gravity
-      p.life -= 0.02;
-
-      if (p.life <= 0) {
-        state.particles.splice(i, 1);
-        continue;
-      }
-
-      ctx.globalAlpha = p.life;
-      ctx.fillStyle = p.color;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.globalAlpha = 1.0;
-    }
-
-    requestRef.current = requestAnimationFrame((t) => update(t));
-  };
-
-  const handleInteraction = (clientX, clientY) => {
-    if (!isPlaying) return;
-
-    const state = gameState.current;
-    
-    // Canvas is now fixed to window, so clientX/Y are accurate directly
-    // but we double check offset just in case
-    const rect = canvasRef.current.getBoundingClientRect();
-    const x = clientX - rect.left;
-    const y = clientY - rect.top;
-
-    // Check collision with balloons
-    // Iterate backwards to pop top balloons first
-    for (let i = state.balloons.length - 1; i >= 0; i--) {
-      const b = state.balloons[i];
-      const dx = x - b.x; 
-      const dy = y - b.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
-
-      // VERY Generous hit area for toddlers (radius + 40px padding)
-      // They can miss by a lot and still pop it
-      if (distance < b.radius + 40) {
-        createParticles(b.x, b.y, b.color);
-        // Pass the persistent audio context to the play function
-        playPopSound(audioCtxRef.current, i);
-        state.balloons.splice(i, 1);
-        setScore(prev => prev + 1);
-        // Don't break; allow one tap to pop overlapping balloons (very satisfying)
-      }
-    }
-  };
-
-  const handleTouch = (e) => {
-    // Critical: Prevent browser scrolling/bouncing
-    if (e.cancelable) e.preventDefault(); 
-    
-    // Multi-touch support: Loop through all changed touches
-    for (let i = 0; i < e.changedTouches.length; i++) {
-        const touch = e.changedTouches[i];
-        handleInteraction(touch.clientX, touch.clientY);
-    }
-  };
-
-  const handleClick = (e) => {
-    handleInteraction(e.clientX, e.clientY);
-  };
-
-  // Prevent elastic scrolling on iOS
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const preventScroll = (e) => {
-        if (e.cancelable) e.preventDefault();
-    };
-
-    // Non-passive listener to forcefully stop scrolling
-    container.addEventListener('touchmove', preventScroll, { passive: false });
-    
-    // Handle Resize
-    window.addEventListener('resize', initGame);
-    initGame();
-    
-    if (isPlaying) {
-      requestRef.current = requestAnimationFrame((t) => update(t));
-    }
-    
-    return () => {
-      container.removeEventListener('touchmove', preventScroll);
-      window.removeEventListener('resize', initGame);
-      if (requestRef.current) cancelAnimationFrame(requestRef.current);
-    };
-  }, [isPlaying]);
 
   return (
-    <div 
-      ref={containerRef}
-      className="fixed inset-0 w-screen h-screen overflow-hidden bg-blue-200 font-sans select-none"
-      style={{ touchAction: 'none' }} 
-    >
-      
-      {/* Game Canvas */}
-      <canvas
-        ref={canvasRef}
-        className="block w-full h-full cursor-pointer touch-none"
-        onTouchStart={handleTouch}
-        onClick={handleClick}
-        title="Balloon Pop Game Area"
-      />
+    <button onClick={onClick} className={`${baseStyle} ${variants[variant]} ${className}`}>
+      {children}
+    </button>
+  );
+};
 
-      {/* SEO & Accessibility Hidden Content */}
-      <div className="sr-only">
-        <h1>Balloon Pop Party - Free Online Sensory Game for Toddlers</h1>
-        <p>A safe, ad-free interactive game for 3-4 year old kids. Tap balloons to pop them and improve fine motor skills.</p>
+const Confetti = ({ active }) => {
+  if (!active) return null;
+  return (
+    <div className="absolute inset-0 pointer-events-none overflow-hidden z-50">
+      {[...Array(20)].map((_, i) => (
+        <div
+          key={i}
+          className="absolute animate-bounce"
+          style={{
+            left: `${Math.random() * 100}%`,
+            top: `-20px`,
+            animationDuration: `${Math.random() * 2 + 1}s`,
+            animationDelay: `${Math.random()}s`,
+            fontSize: '24px'
+          }}
+        >
+          {['🎉', '⭐', '🎈', '✨'][Math.floor(Math.random() * 4)]}
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// --- Game 1: Jigsaw Puzzle ---
+
+const JigsawGame = ({ onBack }) => {
+  const [pieces, setPieces] = useState([]);
+  const [slots, setSlots] = useState([]);
+  const [selectedPiece, setSelectedPiece] = useState(null);
+  const [complete, setComplete] = useState(false);
+  const [fullImage, setFullImage] = useState(null);
+  const gridSize = 3; // 3x3 grid
+
+  // Generate the puzzle image
+  const generatePuzzle = () => {
+    const canvas = document.createElement('canvas');
+    const size = 300;
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+
+    // Draw a simple scene (Farm)
+    // Sky
+    ctx.fillStyle = "#87CEEB";
+    ctx.fillRect(0, 0, size, size);
+    // Sun
+    ctx.fillStyle = "#FFD700";
+    ctx.beginPath();
+    ctx.arc(250, 50, 30, 0, Math.PI * 2);
+    ctx.fill();
+    // Grass
+    ctx.fillStyle = "#90EE90";
+    ctx.fillRect(0, 200, size, 100);
+    // House
+    ctx.fillStyle = "#FF6B6B";
+    ctx.fillRect(50, 150, 100, 100);
+    // Roof
+    ctx.fillStyle = "#8B4513";
+    ctx.beginPath();
+    ctx.moveTo(40, 150);
+    ctx.lineTo(100, 90);
+    ctx.lineTo(160, 150);
+    ctx.fill();
+    // Door
+    ctx.fillStyle = "#4A3728";
+    ctx.fillRect(90, 200, 30, 50);
+    // Tree
+    ctx.fillStyle = "#8B4513";
+    ctx.fillRect(220, 160, 20, 80);
+    ctx.fillStyle = "#228B22";
+    ctx.beginPath();
+    ctx.arc(230, 160, 40, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Store full image for reference
+    setFullImage(canvas.toDataURL());
+
+    const pieceSize = size / gridSize;
+    const newPieces = [];
+    const newSlots = [];
+
+    for (let y = 0; y < gridSize; y++) {
+      for (let x = 0; x < gridSize; x++) {
+        const pieceCanvas = document.createElement('canvas');
+        pieceCanvas.width = pieceSize;
+        pieceCanvas.height = pieceSize;
+        const pCtx = pieceCanvas.getContext('2d');
+        
+        pCtx.drawImage(
+          canvas,
+          x * pieceSize, y * pieceSize, pieceSize, pieceSize, // Source
+          0, 0, pieceSize, pieceSize // Dest
+        );
+        
+        // Draw border
+        pCtx.strokeStyle = '#fff';
+        pCtx.lineWidth = 2;
+        pCtx.strokeRect(0, 0, pieceSize, pieceSize);
+
+        const id = y * gridSize + x;
+        newSlots.push({ id, x, y, current: null });
+        newPieces.push({
+          id,
+          img: pieceCanvas.toDataURL(),
+          correctSlot: id
+        });
+      }
+    }
+
+    // Shuffle pieces
+    setPieces(newPieces.sort(() => Math.random() - 0.5));
+    setSlots(newSlots);
+    setComplete(false);
+    setSelectedPiece(null);
+  };
+
+  useEffect(() => {
+    generatePuzzle();
+  }, []);
+
+  const handlePieceClick = (piece) => {
+    if (selectedPiece && selectedPiece.id === piece.id) {
+        setSelectedPiece(null); // Deselect
+    } else {
+        setSelectedPiece(piece);
+    }
+  };
+
+  const handleSlotClick = (slotId) => {
+    if (!selectedPiece) return;
+
+    // Check if slot is empty
+    const slotIndex = slots.findIndex(s => s.id === slotId);
+    if (slots[slotIndex].current !== null) return;
+
+    const newSlots = [...slots];
+    newSlots[slotIndex].current = selectedPiece;
+    setSlots(newSlots);
+    
+    setPieces(pieces.filter(p => p.id !== selectedPiece.id));
+    setSelectedPiece(null);
+
+    // Check win
+    const allFilled = newSlots.every(s => s.current !== null);
+    if (allFilled) {
+      const allCorrect = newSlots.every(s => s.current.id === s.id);
+      if (allCorrect) setComplete(true);
+    }
+  };
+
+  const handleReset = () => {
+    generatePuzzle();
+  };
+
+  return (
+    <div className="flex flex-col items-center w-full max-w-6xl mx-auto p-2 md:p-4 min-h-screen">
+      {/* Header */}
+      <div className="flex justify-between items-center w-full mb-4">
+        <Button onClick={onBack} variant="outline" className="!px-3 !py-2 text-sm"><ArrowLeft size={16} /> Back</Button>
+        <h2 className="text-xl md:text-2xl font-bold text-blue-600 flex items-center gap-2">
+          <Grid3X3 className="hidden md:block"/> Farm Puzzle
+        </h2>
+        <Button onClick={handleReset} variant="secondary" className="!px-3 !py-2 text-sm"><RefreshCw size={16} /></Button>
       </div>
 
-      {/* Score UI - Safe Area Aware */}
-      <div className="absolute top-4 left-4 right-4 flex justify-between items-start pointer-events-none z-10" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
-        {isPlaying && (
-          <div className="bg-white/80 backdrop-blur rounded-full px-8 py-4 shadow-xl border-4 border-yellow-400">
-             <span className="text-5xl font-black text-yellow-500 tracking-wider">
-               {score}
-             </span>
-          </div>
-        )}
-      </div>
-
-      {/* Watermark - Fixed to bottom right */}
-      <div className="absolute bottom-3 right-4 pointer-events-none opacity-60 z-40 bg-white/30 rounded-full px-3 py-1 backdrop-blur-sm" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-        <p className="text-xs font-bold text-slate-700 tracking-wide drop-shadow-sm">
-          Developed by Vivek Narkhede
-        </p>
-      </div>
-
-      {/* Start/Pause Menu */}
-      {!isPlaying && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm z-50 p-4">
-          <div className="bg-white rounded-3xl p-6 sm:p-10 max-w-sm w-full shadow-2xl text-center border-b-8 border-blue-500 animate-bounce-slow">
-            <h1 className="text-6xl font-black text-blue-500 mb-2 drop-shadow-md">
-              POP!
-            </h1>
-            <h2 className="text-2xl text-gray-700 font-bold mb-2">Balloon Party</h2>
-            <p className="text-gray-500 text-lg mb-8 font-medium">
-              Tap the balloons!
-            </p>
+      <div className="flex flex-col lg:flex-row gap-6 items-center justify-center w-full flex-grow">
+        
+        {/* Left Column: Reference & Board */}
+        <div className="flex flex-col items-center gap-4">
             
-            <button
-              onClick={() => {
-                // Attempt Full Screen on Play
-                const elem = document.documentElement;
-                const requestFS = elem.requestFullscreen || elem.webkitRequestFullscreen || elem.msRequestFullscreen;
-                
-                if (requestFS) {
-                  try {
-                    requestFS.call(elem).catch(() => {
-                        // Pass silently if user agent or preference blocks this
-                    });
-                  } catch(e) {}
-                }
+            {/* Reference Image (Goal) */}
+            <div className="bg-white p-2 rounded-xl shadow-md border border-blue-100 flex flex-col items-center">
+                <span className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Goal</span>
+                {fullImage && (
+                    <img src={fullImage} alt="Goal" className="w-32 h-32 md:w-48 md:h-48 rounded-lg border-2 border-gray-200" />
+                )}
+            </div>
 
-                setIsPlaying(true);
-                
-                // Initialize Audio Context on user gesture (required by browsers)
-                try {
-                  if (!audioCtxRef.current) {
-                    const AudioContext = window.AudioContext || window.webkitAudioContext;
-                    audioCtxRef.current = new AudioContext();
-                  }
-                  if (audioCtxRef.current.state === 'suspended') {
-                    audioCtxRef.current.resume();
-                  }
-                } catch(e) {
-                  console.log("Audio init failed", e);
-                }
-              }}
-              className="w-full bg-yellow-400 hover:bg-yellow-300 active:bg-yellow-500 text-yellow-900 text-4xl font-black py-6 px-8 rounded-2xl shadow-lg transform transition active:scale-95 border-b-8 border-yellow-600"
-              aria-label="Start Game"
-            >
-              PLAY ▶
-            </button>
+            {/* Puzzle Board */}
+            <div className="bg-blue-50 p-2 md:p-4 rounded-xl shadow-inner border-2 border-blue-200">
+                <div className="grid grid-cols-3 gap-0 w-[300px] h-[300px] bg-gray-200 relative shadow-xl">
+                    {complete && <Confetti active={true} />}
+                    {slots.map((slot) => (
+                    <div
+                        key={slot.id}
+                        onClick={() => handleSlotClick(slot.id)}
+                        className={`
+                            w-[100px] h-[100px] border border-gray-300 flex items-center justify-center 
+                            transition-colors duration-200
+                            ${slot.current ? 'bg-white' : 'bg-gray-100'}
+                            ${selectedPiece && !slot.current ? 'bg-blue-100 animate-pulse cursor-pointer' : ''}
+                        `}
+                    >
+                        {slot.current ? (
+                        <img src={slot.current.img} className="w-full h-full block" alt="placed piece" />
+                        ) : (
+                        <div className="text-gray-300 opacity-20 text-4xl font-bold">+</div>
+                        )}
+                    </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+
+        {/* Right Column: Pieces Pool */}
+        <div className="bg-white p-4 rounded-xl shadow-lg border-2 border-blue-100 w-full max-w-[350px] lg:h-[600px] flex flex-col">
+          <h3 className="text-lg font-bold text-gray-500 mb-4 text-center sticky top-0 bg-white z-10 py-2 border-b">
+              {pieces.length > 0 ? "Tap a piece to move it!" : "Great Job!"}
+          </h3>
+          
+          <div className="grid grid-cols-3 gap-3 overflow-y-auto p-2 custom-scrollbar">
+            {pieces.map((piece) => (
+              <div
+                key={piece.id}
+                onClick={() => handlePieceClick(piece)}
+                className={`
+                    cursor-pointer transition-all transform duration-200 rounded-lg overflow-hidden border-2
+                    ${selectedPiece?.id === piece.id 
+                        ? 'ring-4 ring-blue-400 scale-105 border-blue-500 shadow-xl z-10' 
+                        : 'border-transparent hover:scale-105 hover:shadow-md'
+                    }
+                `}
+              >
+                <img src={piece.img} alt="puzzle piece" className="w-full block" />
+              </div>
+            ))}
+            {pieces.length === 0 && !complete && (
+              <div className="col-span-3 text-center text-gray-400 py-8">No pieces left!</div>
+            )}
+            {complete && (
+               <div className="col-span-3 flex flex-col items-center justify-center text-green-500 py-8">
+                 <Trophy size={64} className="mb-4 animate-bounce" />
+                 <span className="font-bold text-xl">Puzzle Solved!</span>
+               </div>
+            )}
           </div>
         </div>
-      )}
+      </div>
+    </div>
+  );
+};
 
-      {/* Pause Button - Big hit target */}
-      {isPlaying && (
-        <button
-          onClick={() => setIsPlaying(false)}
-          className="absolute top-4 right-4 bg-white/60 p-4 rounded-full shadow-lg active:bg-white active:scale-90 transition z-50"
-          style={{ marginTop: 'env(safe-area-inset-top)' }}
-          aria-label="Pause Game"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="6" y="4" width="4" height="16"></rect>
-            <rect x="14" y="4" width="4" height="16"></rect>
-          </svg>
-        </button>
+// --- Game 2: Memory Match ---
+
+const MemoryGame = ({ onBack }) => {
+  const cardsData = ['🐶', '🐱', '🐭', '🐹', '🐰', '🦊'];
+  const [cards, setCards] = useState([]);
+  const [flipped, setFlipped] = useState([]);
+  const [solved, setSolved] = useState([]);
+  const [disabled, setDisabled] = useState(false);
+
+  useEffect(() => {
+    shuffleCards();
+  }, []);
+
+  const shuffleCards = () => {
+    const doubled = [...cardsData, ...cardsData];
+    const shuffled = doubled
+      .sort(() => Math.random() - 0.5)
+      .map((emoji, index) => ({ id: index, emoji }));
+    setCards(shuffled);
+    setFlipped([]);
+    setSolved([]);
+    setDisabled(false);
+  };
+
+  const handleClick = (id) => {
+    if (disabled || flipped.includes(id) || solved.includes(id)) return;
+
+    if (flipped.length === 0) {
+      setFlipped([id]);
+      return;
+    }
+
+    if (flipped.length === 1) {
+      setDisabled(true);
+      const firstId = flipped[0];
+      const secondId = id;
+      setFlipped([firstId, secondId]);
+
+      if (cards[firstId].emoji === cards[secondId].emoji) {
+        setSolved([...solved, firstId, secondId]);
+        setFlipped([]);
+        setDisabled(false);
+      } else {
+        setTimeout(() => {
+          setFlipped([]);
+          setDisabled(false);
+        }, 1000);
+      }
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-center w-full max-w-4xl mx-auto p-4 min-h-screen">
+      <div className="flex justify-between w-full mb-6">
+        <Button onClick={onBack} variant="outline" className="!px-3 !py-2 text-sm"><ArrowLeft size={16} /> Back</Button>
+        <h2 className="text-2xl font-bold text-purple-600 flex items-center gap-2">
+          <Brain /> Memory Match
+        </h2>
+        <Button onClick={shuffleCards} variant="secondary" className="!px-3 !py-2 text-sm"><RefreshCw size={16} /></Button>
+      </div>
+
+      <div className="grid grid-cols-3 md:grid-cols-4 gap-4 w-full max-w-md my-auto">
+        {cards.map((card) => {
+          const isFlipped = flipped.includes(card.id) || solved.includes(card.id);
+          const isSolved = solved.includes(card.id);
+          return (
+            <div
+              key={card.id}
+              onClick={() => handleClick(card.id)}
+              className={`
+                aspect-square rounded-xl cursor-pointer shadow-lg
+                flex items-center justify-center text-4xl transition-all duration-300 transform
+                ${isFlipped ? 'bg-white rotate-y-180' : 'bg-purple-500'}
+                ${isSolved ? 'bg-green-100 ring-4 ring-green-400' : ''}
+                active:scale-95 hover:scale-105
+              `}
+            >
+              {isFlipped ? card.emoji : <span className="text-white text-2xl font-bold">?</span>}
+            </div>
+          );
+        })}
+      </div>
+      
+      {solved.length === cards.length && cards.length > 0 && (
+        <div className="mt-8 text-center animate-bounce">
+          <h3 className="text-3xl font-bold text-green-600">You Won! 🎉</h3>
+          <Confetti active={true} />
+        </div>
       )}
     </div>
   );
 };
 
-export default BalloonGame;
+// --- Game 3: Shape Sorter ---
+
+const SortGame = ({ onBack }) => {
+  const categories = {
+    fruit: { label: 'Fruits', color: 'bg-red-100 border-red-300 text-red-600', bg: 'bg-red-50', icon: '🍎' },
+    animal: { label: 'Animals', color: 'bg-green-100 border-green-300 text-green-600', bg: 'bg-green-50', icon: '🐾' }
+  };
+  
+  const itemsData = [
+    { id: 1, type: 'fruit', content: '🍎' },
+    { id: 2, type: 'fruit', content: '🍌' },
+    { id: 3, type: 'fruit', content: '🍇' },
+    { id: 4, type: 'fruit', content: '🍓' },
+    { id: 5, type: 'animal', content: '🐶' },
+    { id: 6, type: 'animal', content: '🐱' },
+    { id: 7, type: 'animal', content: '🦁' },
+    { id: 8, type: 'animal', content: '🐮' },
+  ];
+
+  const [items, setItems] = useState([]);
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [score, setScore] = useState(0);
+
+  useEffect(() => {
+    resetGame();
+  }, []);
+
+  const resetGame = () => {
+    setItems(itemsData.sort(() => Math.random() - 0.5));
+    setScore(0);
+    setSelectedItem(null);
+  };
+
+  // Mobile friendly: Tap item to select, tap box to drop
+  const handleItemClick = (item) => {
+    if (selectedItem?.id === item.id) {
+        setSelectedItem(null);
+    } else {
+        setSelectedItem(item);
+    }
+  };
+
+  const handleCategoryClick = (categoryKey) => {
+      if (!selectedItem) return;
+
+      if (selectedItem.type === categoryKey) {
+        // Correct
+        setItems(items.filter(i => i.id !== selectedItem.id));
+        setScore(s => s + 1);
+        setSelectedItem(null);
+      } else {
+          // Wrong shake effect could go here
+          setSelectedItem(null);
+      }
+  }
+
+  return (
+    <div className="flex flex-col items-center w-full max-w-4xl mx-auto p-4 min-h-screen">
+      <div className="flex justify-between w-full mb-6">
+        <Button onClick={onBack} variant="outline" className="!px-3 !py-2 text-sm"><ArrowLeft size={16} /> Back</Button>
+        <h2 className="text-2xl font-bold text-orange-600 flex items-center gap-2">
+          <Shapes /> Sort It Out!
+        </h2>
+        <Button onClick={resetGame} variant="secondary" className="!px-3 !py-2 text-sm"><RefreshCw size={16} /></Button>
+      </div>
+
+      <div className="text-xl font-bold text-gray-700 mb-6 bg-white px-4 py-2 rounded-full shadow-sm">
+        {items.length > 0 ? "Tap an item, then tap its box!" : "Complete!"}
+      </div>
+
+      {items.length === 0 ? (
+         <div className="text-center py-12 flex-grow flex flex-col justify-center items-center">
+            <h3 className="text-4xl font-bold text-green-600 mb-4">All Sorted! 🎉</h3>
+             <Button onClick={resetGame} variant="success">Play Again</Button>
+             <Confetti active={true} />
+         </div>
+      ) : (
+        <div className="flex flex-wrap gap-4 justify-center mb-12 min-h-[100px] content-start">
+          {items.map((item) => (
+            <div
+              key={item.id}
+              onClick={() => handleItemClick(item)}
+              className={`
+                w-16 h-16 md:w-20 md:h-20 bg-white rounded-full shadow-md flex items-center justify-center text-4xl cursor-pointer transition-all
+                ${selectedItem?.id === item.id ? 'ring-4 ring-orange-400 scale-110 -translate-y-2' : 'hover:scale-105'}
+              `}
+            >
+              {item.content}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-4 md:gap-8 w-full max-w-2xl mt-auto md:mt-0 mb-8">
+        {Object.entries(categories).map(([key, cat]) => (
+          <div
+            key={key}
+            onClick={() => handleCategoryClick(key)}
+            className={`
+              h-40 md:h-64 rounded-2xl border-4 border-dashed flex flex-col items-center justify-center transition-all cursor-pointer
+              ${cat.color} ${cat.bg}
+              ${selectedItem ? 'animate-pulse ring-2 ring-offset-2 ring-gray-200' : ''}
+              active:scale-95
+            `}
+          >
+            <span className="text-5xl md:text-7xl mb-4">{cat.icon}</span>
+            <span className="text-xl md:text-2xl font-bold uppercase tracking-wider">{cat.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// --- Main App ---
+
+const App = () => {
+  const [view, setView] = useState('menu');
+
+  useEffect(() => {
+      document.title = "Kids Puzzle Playground - Educational Games";
+  }, []);
+
+  const renderView = () => {
+    switch(view) {
+      case 'jigsaw': return <JigsawGame onBack={() => setView('menu')} />;
+      case 'memory': return <MemoryGame onBack={() => setView('menu')} />;
+      case 'sort': return <SortGame onBack={() => setView('menu')} />;
+      default: return (
+        <div className="flex flex-col items-center justify-center min-h-[80vh] gap-8 p-4 text-center">
+          <div className="animate-fade-in-down">
+            <h1 className="text-4xl md:text-6xl font-black text-slate-800 tracking-tight mb-2 drop-shadow-sm">
+                🧩 Kids Puzzle
+            </h1>
+            <h2 className="text-3xl md:text-5xl font-black text-blue-500 tracking-tight">
+                Playground
+            </h2>
+          </div>
+          
+          <p className="text-lg text-gray-500 max-w-md mb-4">
+            Fun, safe, and educational games designed for little hands.
+          </p>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl px-4">
+            <button 
+              onClick={() => setView('jigsaw')}
+              className="group bg-white p-6 rounded-3xl shadow-xl hover:shadow-2xl transition-all transform hover:-translate-y-2 border-b-8 border-blue-200 active:border-b-0 active:translate-y-1 flex flex-col items-center gap-4"
+            >
+              <div className="w-24 h-24 bg-blue-100 rounded-full flex items-center justify-center text-blue-500 group-hover:rotate-12 transition-transform duration-300">
+                <Grid3X3 size={48} />
+              </div>
+              <div>
+                <h3 className="text-2xl font-bold text-gray-800">Jigsaw</h3>
+                <p className="text-gray-400 font-medium">Build the Farm</p>
+              </div>
+            </button>
+
+            <button 
+              onClick={() => setView('memory')}
+              className="group bg-white p-6 rounded-3xl shadow-xl hover:shadow-2xl transition-all transform hover:-translate-y-2 border-b-8 border-purple-200 active:border-b-0 active:translate-y-1 flex flex-col items-center gap-4"
+            >
+              <div className="w-24 h-24 bg-purple-100 rounded-full flex items-center justify-center text-purple-500 group-hover:rotate-12 transition-transform duration-300">
+                <Brain size={48} />
+              </div>
+              <div>
+                <h3 className="text-2xl font-bold text-gray-800">Memory</h3>
+                <p className="text-gray-400 font-medium">Find Pairs</p>
+              </div>
+            </button>
+
+            <button 
+              onClick={() => setView('sort')}
+              className="group bg-white p-6 rounded-3xl shadow-xl hover:shadow-2xl transition-all transform hover:-translate-y-2 border-b-8 border-orange-200 active:border-b-0 active:translate-y-1 flex flex-col items-center gap-4"
+            >
+              <div className="w-24 h-24 bg-orange-100 rounded-full flex items-center justify-center text-orange-500 group-hover:rotate-12 transition-transform duration-300">
+                <Shapes size={48} />
+              </div>
+              <div>
+                <h3 className="text-2xl font-bold text-gray-800">Sorting</h3>
+                <p className="text-gray-400 font-medium">Fruits & Animals</p>
+              </div>
+            </button>
+          </div>
+        </div>
+      );
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-blue-50 to-white font-sans text-slate-800 flex flex-col">
+      <header className="p-4 border-b border-white/50 bg-white/50 backdrop-blur-sm sticky top-0 z-20 shadow-sm">
+        <div className="max-w-6xl mx-auto flex items-center justify-center relative">
+             <span className="font-black text-xl tracking-wider text-blue-600 opacity-80 flex items-center gap-2">
+                <Star className="text-yellow-400 fill-current" size={20}/> TOY BOX
+             </span>
+        </div>
+      </header>
+      
+      <main className="flex-grow">
+        {renderView()}
+      </main>
+
+      <footer className="p-6 text-center text-slate-400 text-sm font-medium bg-slate-50 border-t border-slate-100">
+          <p>© {new Date().getFullYear()} Kids Puzzle Playground</p>
+          <p className="mt-1 text-slate-500">Developed by <span className="text-blue-500 font-bold">Vivek Narkhede</span></p>
+      </footer>
+    </div>
+  );
+};
+
+export default App;
