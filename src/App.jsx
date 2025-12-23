@@ -1,19 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-// Simple Pentatonic Synth for pleasant sounds
-const playSound = (index) => {
+// Improved Audio Engine for "Pop" sounds
+const playPopSound = (ctx, index) => {
+  if (!ctx) return;
+  
   try {
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContext) return;
-    
-    const ctx = new AudioContext();
     const osc = ctx.createOscillator();
     const gainNode = ctx.createGain();
     
     osc.connect(gainNode);
     gainNode.connect(ctx.destination);
     
-    // Pentatonic scale (C major pentatonic: C, D, E, G, A)
+    // Pentatonic scale (C major pentatonic)
     const scale = [
       261.63, 293.66, 329.63, 392.00, 440.00, 
       523.25, 587.33, 659.25, 783.99, 880.00
@@ -21,23 +19,27 @@ const playSound = (index) => {
     
     const note = scale[index % scale.length];
     
-    osc.type = 'sine';
+    // "Pop" characteristic: Triangle wave + Pitch Bend
+    osc.type = 'triangle';
     osc.frequency.setValueAtTime(note, ctx.currentTime);
+    // Rapidly drop pitch by an octave to simulate the "pop" tension release
+    osc.frequency.exponentialRampToValueAtTime(note * 0.5, ctx.currentTime + 0.1);
     
-    // Envelope for a "pop" sound
-    gainNode.gain.setValueAtTime(0.1, ctx.currentTime);
+    // Envelope for a crisp, short sound
+    gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
     gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
     
     osc.start();
     osc.stop(ctx.currentTime + 0.1);
   } catch (e) {
-    // Silent fail for audio contexts that aren't ready
+    console.error("Audio error", e);
   }
 };
 
 const BalloonGame = () => {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
+  const audioCtxRef = useRef(null); // Persistent Audio Context
   const [score, setScore] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const requestRef = useRef();
@@ -275,7 +277,8 @@ const BalloonGame = () => {
       // They can miss by a lot and still pop it
       if (distance < b.radius + 40) {
         createParticles(b.x, b.y, b.color);
-        playSound(i);
+        // Pass the persistent audio context to the play function
+        playPopSound(audioCtxRef.current, i);
         state.balloons.splice(i, 1);
         setScore(prev => prev + 1);
         // Don't break; allow one tap to pop overlapping balloons (very satisfying)
@@ -392,10 +395,19 @@ const BalloonGame = () => {
                 }
 
                 setIsPlaying(true);
+                
+                // Initialize Audio Context on user gesture (required by browsers)
                 try {
-                  const AudioContext = window.AudioContext || window.webkitAudioContext;
-                  new AudioContext().resume();
-                } catch(e) {}
+                  if (!audioCtxRef.current) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    audioCtxRef.current = new AudioContext();
+                  }
+                  if (audioCtxRef.current.state === 'suspended') {
+                    audioCtxRef.current.resume();
+                  }
+                } catch(e) {
+                  console.log("Audio init failed", e);
+                }
               }}
               className="w-full bg-yellow-400 hover:bg-yellow-300 active:bg-yellow-500 text-yellow-900 text-4xl font-black py-6 px-8 rounded-2xl shadow-lg transform transition active:scale-95 border-b-8 border-yellow-600"
               aria-label="Start Game"
