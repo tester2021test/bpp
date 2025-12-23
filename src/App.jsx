@@ -64,17 +64,23 @@ const BalloonGame = () => {
 
   const initGame = () => {
     const canvas = canvasRef.current;
-    const container = containerRef.current;
-    if (!canvas || !container) return;
+    if (!canvas) return;
     
-    // Use container dimensions for better mobile sizing
-    gameState.current.width = container.clientWidth;
-    gameState.current.height = container.clientHeight;
+    // Force canvas to match window visual viewport to handle mobile bars correctly
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+
+    gameState.current.width = width;
+    gameState.current.height = height;
     
     // Handle retina displays
     const dpr = window.devicePixelRatio || 1;
-    canvas.width = gameState.current.width * dpr;
-    canvas.height = gameState.current.height * dpr;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    
+    // CSS size must match
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
     
     gameState.current.ctx = canvas.getContext('2d');
     gameState.current.ctx.scale(dpr, dpr);
@@ -104,8 +110,8 @@ const BalloonGame = () => {
     const w = gameState.current.width;
     const h = gameState.current.height;
     const color = colors[Math.floor(Math.random() * colors.length)];
-    // Larger balloons for mobile touch targets
-    const size = 45 + Math.random() * 35; 
+    // EXTRA LARGE balloons for mobile touch targets (55-95px radius)
+    const size = 55 + Math.random() * 40; 
     
     return {
       x: Math.random() * (w - size*2) + size,
@@ -120,9 +126,9 @@ const BalloonGame = () => {
   };
 
   const createParticles = (x, y, color) => {
-    for (let i = 0; i < 8; i++) {
-      const angle = (Math.PI * 2 * i) / 8;
-      const speed = 2 + Math.random() * 3;
+    for (let i = 0; i < 12; i++) { // More particles!
+      const angle = (Math.PI * 2 * i) / 12;
+      const speed = 3 + Math.random() * 4;
       gameState.current.particles.push({
         x,
         y,
@@ -130,7 +136,7 @@ const BalloonGame = () => {
         vy: Math.sin(angle) * speed,
         life: 1.0,
         color: color.fill,
-        size: 5 + Math.random() * 5
+        size: 8 + Math.random() * 6
       });
     }
   };
@@ -171,8 +177,8 @@ const BalloonGame = () => {
         ctx.globalAlpha = 1.0;
     });
 
-    // Spawn Balloons
-    if (time - state.lastBalloonTime > 1000) { 
+    // Spawn Balloons (Faster spawn rate for more fun)
+    if (time - state.lastBalloonTime > 800) { 
       state.balloons.push(createBalloon());
       state.lastBalloonTime = time;
     }
@@ -183,7 +189,7 @@ const BalloonGame = () => {
       b.y -= b.speed;
       const wobble = Math.sin(time * 0.003 + b.wobbleOffset) * 1;
       
-      if (b.y < -100) {
+      if (b.y < -150) {
         state.balloons.splice(i, 1);
         continue;
       }
@@ -198,7 +204,7 @@ const BalloonGame = () => {
         b.y + b.radius + 60
       );
       ctx.strokeStyle = '#888';
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 3;
       ctx.stroke();
 
       // Draw Balloon
@@ -216,9 +222,9 @@ const BalloonGame = () => {
       // Knot
       ctx.beginPath();
       ctx.fillStyle = b.color.fill;
-      ctx.moveTo(b.x + wobble - 5, b.y + b.radius * 1.1);
-      ctx.lineTo(b.x + wobble + 5, b.y + b.radius * 1.1);
-      ctx.lineTo(b.x + wobble, b.y + b.radius * 1.1 + 8);
+      ctx.moveTo(b.x + wobble - 8, b.y + b.radius * 1.1);
+      ctx.lineTo(b.x + wobble + 8, b.y + b.radius * 1.1);
+      ctx.lineTo(b.x + wobble, b.y + b.radius * 1.1 + 12);
       ctx.fill();
     }
 
@@ -227,7 +233,7 @@ const BalloonGame = () => {
       const p = state.particles[i];
       p.x += p.vx;
       p.y += p.vy;
-      p.vy += 0.1;
+      p.vy += 0.2; // Stronger gravity
       p.life -= 0.02;
 
       if (p.life <= 0) {
@@ -251,40 +257,60 @@ const BalloonGame = () => {
 
     const state = gameState.current;
     
-    // Adjust for canvas position if necessary (though usually 0,0)
+    // Canvas is now fixed to window, so clientX/Y are accurate directly
+    // but we double check offset just in case
     const rect = canvasRef.current.getBoundingClientRect();
     const x = clientX - rect.left;
     const y = clientY - rect.top;
 
     // Check collision with balloons
+    // Iterate backwards to pop top balloons first
     for (let i = state.balloons.length - 1; i >= 0; i--) {
       const b = state.balloons[i];
       const dx = x - b.x; 
       const dy = y - b.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
 
-      // Generous hit area for toddlers (radius + 20px padding)
-      if (distance < b.radius + 20) {
+      // VERY Generous hit area for toddlers (radius + 40px padding)
+      // They can miss by a lot and still pop it
+      if (distance < b.radius + 40) {
         createParticles(b.x, b.y, b.color);
         playSound(i);
         state.balloons.splice(i, 1);
         setScore(prev => prev + 1);
-        break; 
+        // Don't break; allow one tap to pop overlapping balloons (very satisfying)
       }
     }
   };
 
   const handleTouch = (e) => {
-    e.preventDefault(); // Critical for preventing scroll/zoom on mobile
-    const touch = e.changedTouches[0];
-    handleInteraction(touch.clientX, touch.clientY);
+    // Critical: Prevent browser scrolling/bouncing
+    if (e.cancelable) e.preventDefault(); 
+    
+    // Multi-touch support: Loop through all changed touches
+    for (let i = 0; i < e.changedTouches.length; i++) {
+        const touch = e.changedTouches[i];
+        handleInteraction(touch.clientX, touch.clientY);
+    }
   };
 
   const handleClick = (e) => {
     handleInteraction(e.clientX, e.clientY);
   };
 
+  // Prevent elastic scrolling on iOS
   useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const preventScroll = (e) => {
+        if (e.cancelable) e.preventDefault();
+    };
+
+    // Non-passive listener to forcefully stop scrolling
+    container.addEventListener('touchmove', preventScroll, { passive: false });
+    
+    // Handle Resize
     window.addEventListener('resize', initGame);
     initGame();
     
@@ -293,6 +319,7 @@ const BalloonGame = () => {
     }
     
     return () => {
+      container.removeEventListener('touchmove', preventScroll);
       window.removeEventListener('resize', initGame);
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
     };
@@ -301,15 +328,14 @@ const BalloonGame = () => {
   return (
     <div 
       ref={containerRef}
-      className="relative w-full h-full overflow-hidden bg-blue-200 font-sans select-none"
-      style={{ touchAction: 'none' }} // Disables browser gestures
+      className="fixed inset-0 w-screen h-screen overflow-hidden bg-blue-200 font-sans select-none"
+      style={{ touchAction: 'none' }} 
     >
       
       {/* Game Canvas */}
       <canvas
         ref={canvasRef}
-        className="block w-full h-full cursor-pointer"
-        style={{ touchAction: 'none' }}
+        className="block w-full h-full cursor-pointer touch-none"
         onTouchStart={handleTouch}
         onClick={handleClick}
         title="Balloon Pop Game Area"
@@ -322,19 +348,19 @@ const BalloonGame = () => {
       </div>
 
       {/* Score UI - Safe Area Aware */}
-      <div className="absolute top-4 left-4 right-4 flex justify-between items-start pointer-events-none" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+      <div className="absolute top-4 left-4 right-4 flex justify-between items-start pointer-events-none z-10" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
         {isPlaying && (
-          <div className="bg-white/80 backdrop-blur rounded-full px-6 py-2 shadow-lg border-4 border-yellow-400">
-             <span className="text-4xl font-black text-yellow-500 tracking-wider">
+          <div className="bg-white/80 backdrop-blur rounded-full px-8 py-4 shadow-xl border-4 border-yellow-400">
+             <span className="text-5xl font-black text-yellow-500 tracking-wider">
                {score}
              </span>
           </div>
         )}
       </div>
 
-      {/* Watermark */}
-      <div className="absolute bottom-2 right-4 pointer-events-none opacity-50 z-40" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-        <p className="text-xs font-medium text-slate-600 tracking-wide drop-shadow-sm">
+      {/* Watermark - Fixed to bottom right */}
+      <div className="absolute bottom-3 right-4 pointer-events-none opacity-60 z-40 bg-white/30 rounded-full px-3 py-1 backdrop-blur-sm" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        <p className="text-xs font-bold text-slate-700 tracking-wide drop-shadow-sm">
           Developed by Vivek Narkhede
         </p>
       </div>
@@ -342,13 +368,13 @@ const BalloonGame = () => {
       {/* Start/Pause Menu */}
       {!isPlaying && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm z-50 p-4">
-          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-sm w-full shadow-2xl text-center border-b-8 border-blue-500 animate-bounce-slow">
-            <h1 className="text-5xl font-black text-blue-500 mb-2 drop-shadow-md">
+          <div className="bg-white rounded-3xl p-6 sm:p-10 max-w-sm w-full shadow-2xl text-center border-b-8 border-blue-500 animate-bounce-slow">
+            <h1 className="text-6xl font-black text-blue-500 mb-2 drop-shadow-md">
               POP!
             </h1>
-            <h2 className="text-xl text-gray-700 font-bold mb-1">Balloon Party</h2>
-            <p className="text-gray-500 text-sm mb-6">
-              A sensory game for toddlers.<br/>Tap to pop!
+            <h2 className="text-2xl text-gray-700 font-bold mb-2">Balloon Party</h2>
+            <p className="text-gray-500 text-lg mb-8 font-medium">
+              Tap the balloons!
             </p>
             
             <button
@@ -359,7 +385,7 @@ const BalloonGame = () => {
                   new AudioContext().resume();
                 } catch(e) {}
               }}
-              className="w-full bg-yellow-400 hover:bg-yellow-300 active:bg-yellow-500 text-yellow-900 text-3xl font-black py-5 px-8 rounded-2xl shadow-lg transform transition active:scale-95 border-b-8 border-yellow-600"
+              className="w-full bg-yellow-400 hover:bg-yellow-300 active:bg-yellow-500 text-yellow-900 text-4xl font-black py-6 px-8 rounded-2xl shadow-lg transform transition active:scale-95 border-b-8 border-yellow-600"
               aria-label="Start Game"
             >
               PLAY ▶
@@ -368,15 +394,15 @@ const BalloonGame = () => {
         </div>
       )}
 
-      {/* Pause Button */}
+      {/* Pause Button - Big hit target */}
       {isPlaying && (
         <button
           onClick={() => setIsPlaying(false)}
-          className="absolute top-4 right-4 bg-white/50 p-3 rounded-full hover:bg-white/80 pointer-events-auto active:scale-90 transition"
+          className="absolute top-4 right-4 bg-white/60 p-4 rounded-full shadow-lg active:bg-white active:scale-90 transition z-50"
           style={{ marginTop: 'env(safe-area-inset-top)' }}
           aria-label="Pause Game"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+          <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
             <rect x="6" y="4" width="4" height="16"></rect>
             <rect x="14" y="4" width="4" height="16"></rect>
           </svg>
