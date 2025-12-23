@@ -379,6 +379,18 @@ const BalloonGame = () => {
             
             <button
               onClick={() => {
+                // Attempt Full Screen on Play
+                const elem = document.documentElement;
+                const requestFS = elem.requestFullscreen || elem.webkitRequestFullscreen || elem.msRequestFullscreen;
+                
+                if (requestFS) {
+                  try {
+                    requestFS.call(elem).catch(() => {
+                        // Pass silently if user agent or preference blocks this
+                    });
+                  } catch(e) {}
+                }
+
                 setIsPlaying(true);
                 try {
                   const AudioContext = window.AudioContext || window.webkitAudioContext;
