@@ -1,568 +1,709 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Home, RefreshCw, Trophy, ArrowLeft, Star, Grid3X3, Shapes, Brain, Maximize } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { 
+  Calculator, ChevronDown, ChevronUp, HelpCircle, CheckCircle, 
+  Building, PieChart, TrendingUp, Shield, Lightbulb, Wallet, ArrowRight,
+  Printer, RotateCcw
+} from 'lucide-react';
 
-// --- Shared Components ---
+const Card = ({ children, className = "" }) => (
+  <section className={`bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden ${className}`}>
+    {children}
+  </section>
+);
 
-const Button = ({ onClick, children, className = "", variant = "primary" }) => {
-  const baseStyle = "px-4 py-2 md:px-6 md:py-3 rounded-2xl font-bold text-lg transition-all transform hover:scale-105 active:scale-95 shadow-lg flex items-center justify-center gap-2 select-none";
-  const variants = {
-    primary: "bg-blue-500 hover:bg-blue-600 text-white border-b-4 border-blue-700 active:border-b-0 active:translate-y-1",
-    secondary: "bg-purple-500 hover:bg-purple-600 text-white border-b-4 border-purple-700 active:border-b-0 active:translate-y-1",
-    success: "bg-green-500 hover:bg-green-600 text-white border-b-4 border-green-700 active:border-b-0 active:translate-y-1",
-    danger: "bg-red-500 hover:bg-red-600 text-white border-b-4 border-red-700 active:border-b-0 active:translate-y-1",
-    outline: "bg-white text-gray-700 border-2 border-gray-200 hover:bg-gray-50 active:border-b-0 active:translate-y-1"
+const TipCard = ({ icon, title, desc, savings }) => (
+  <article className="flex items-start gap-3 p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 hover:bg-indigo-50 transition-colors cursor-default">
+    <div className="p-2 bg-white rounded-lg shadow-sm shrink-0" aria-hidden="true">
+      {icon}
+    </div>
+    <div>
+      <h4 className="text-sm font-bold text-slate-800">{title}</h4>
+      <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">{desc}</p>
+      {savings && (
+        <div className="mt-1.5 inline-flex items-center gap-1 text-xs font-bold text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded-full">
+          Potential Save: ₹{savings}
+        </div>
+      )}
+    </div>
+  </article>
+);
+
+const InputGroup = ({ label, value, onChange, tooltip, icon: Icon, extra }) => (
+  <div className="mb-5 print:hidden">
+    <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center gap-2">
+        {Icon && <Icon className="w-4 h-4 text-slate-400" aria-hidden="true" />}
+        <label className="text-sm font-semibold text-slate-700">{label}</label>
+        {tooltip && (
+          <div className="group relative">
+            <HelpCircle className="w-3.5 h-3.5 text-slate-300 hover:text-blue-500 cursor-help transition-colors" aria-label="Info" />
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-slate-800 text-white text-xs rounded-lg hidden group-hover:block z-20 shadow-xl leading-relaxed">
+              {tooltip}
+              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-800 rotate-45"></div>
+            </div>
+          </div>
+        )}
+      </div>
+      {extra}
+    </div>
+    <div className="relative group">
+      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium group-focus-within:text-blue-500 transition-colors">₹</span>
+      <input
+        type="number"
+        value={value || ''}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full pl-8 pr-4 py-3 text-base bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium text-slate-800 placeholder-slate-300 outline-none hover:bg-white"
+        placeholder="0"
+        inputMode="decimal"
+        aria-label={label}
+      />
+    </div>
+  </div>
+);
+
+const ResultRow = ({ label, oldVal, newVal, isTotal, highlight }) => (
+  <div className={`flex justify-between items-center py-3 border-b border-slate-50 last:border-0 ${highlight ? 'bg-blue-50/30 -mx-5 px-5 print:bg-gray-100' : ''}`}>
+    <span className={`text-sm ${isTotal ? 'font-bold text-slate-900' : 'text-slate-500'}`}>{label}</span>
+    <div className="flex gap-4 sm:gap-8 text-sm">
+      <span className={`w-24 text-right font-medium ${isTotal ? 'text-slate-900' : 'text-slate-700'}`}>
+        {oldVal !== null ? `₹${oldVal.toLocaleString('en-IN')}` : '-'}
+      </span>
+      <span className={`w-24 text-right font-medium ${isTotal ? 'text-blue-600 print:text-black' : 'text-slate-700'}`}>
+        {newVal !== null ? `₹${newVal.toLocaleString('en-IN')}` : '-'}
+      </span>
+    </div>
+  </div>
+);
+
+export default function IndianTaxCalculator() {
+  // --- SEO & Title Setup ---
+  useEffect(() => {
+    // Dynamic Title for SEO
+    document.title = "Indian Income Tax Calculator 2025-26 | Old vs New Regime | By Vivek Narkhede";
+    
+    // Dynamic Meta Description for SEO
+    let metaDescription = document.querySelector('meta[name="description"]');
+    if (!metaDescription) {
+      metaDescription = document.createElement('meta');
+      metaDescription.name = "description";
+      document.head.appendChild(metaDescription);
+    }
+    metaDescription.content = "Calculate your Income Tax for FY 2025-26 with this free tool by Vivek Narkhede. Compare Old vs New Regime, calculate HRA, 80C, 80D, and find tax saving opportunities.";
+  }, []);
+
+  // --- State ---
+  const [fy, setFy] = useState('2025-2026');
+  const [ageGroup, setAgeGroup] = useState('general');
+  
+  // Income
+  const [grossSalary, setGrossSalary] = useState(0);
+  const [otherIncome, setOtherIncome] = useState(0);
+  const [interestIncome, setInterestIncome] = useState(0);
+  
+  // Deductions
+  const [basicDeduction80C, setBasicDeduction80C] = useState(0);
+  
+  // Advanced 80D
+  const [medicalSelf, setMedicalSelf] = useState(0);
+  const [medicalParents, setMedicalParents] = useState(0);
+  const [parentsSenior, setParentsSenior] = useState(false);
+
+  const [nps80CCD1B, setNps80CCD1B] = useState(0);
+  const [hra, setHra] = useState(0);
+  const [homeLoanInterest, setHomeLoanInterest] = useState(0);
+  const [professionalTax, setProfessionalTax] = useState(0);
+  const [otherDeductions, setOtherDeductions] = useState(0);
+  
+  // HRA Calculator State
+  const [showHraCalc, setShowHraCalc] = useState(false);
+  const [basicSalary, setBasicSalary] = useState(0);
+  const [hraReceived, setHraReceived] = useState(0);
+  const [rentPaid, setRentPaid] = useState(0);
+  const [isMetro, setIsMetro] = useState(true);
+
+  const [showBreakdown, setShowBreakdown] = useState(false);
+
+  // --- Logic ---
+
+  const STANDARD_DEDUCTION = 75000;
+
+  // Reset Handler
+  const handleReset = () => {
+    if (window.confirm('Reset all values?')) {
+      setGrossSalary(0); setOtherIncome(0); setInterestIncome(0);
+      setBasicDeduction80C(0); setMedicalSelf(0); setMedicalParents(0); setParentsSenior(false);
+      setNps80CCD1B(0); setHra(0); setHomeLoanInterest(0); setProfessionalTax(0); setOtherDeductions(0);
+      setBasicSalary(0); setHraReceived(0); setRentPaid(0);
+    }
   };
 
-  return (
-    <button onClick={onClick} className={`${baseStyle} ${variants[variant]} ${className}`}>
-      {children}
-    </button>
-  );
-};
+  // Print Handler
+  const handlePrint = () => {
+    window.print();
+  };
 
-const Confetti = ({ active }) => {
-  if (!active) return null;
-  return (
-    <div className="absolute inset-0 pointer-events-none overflow-hidden z-50">
-      {[...Array(20)].map((_, i) => (
-        <div
-          key={i}
-          className="absolute animate-bounce"
-          style={{
-            left: `${Math.random() * 100}%`,
-            top: `-20px`,
-            animationDuration: `${Math.random() * 2 + 1}s`,
-            animationDelay: `${Math.random()}s`,
-            fontSize: '24px'
-          }}
-        >
-          {['🎉', '⭐', '🎈', '✨'][Math.floor(Math.random() * 4)]}
-        </div>
-      ))}
-    </div>
-  );
-};
+  // Auto-calculate HRA
+  useMemo(() => {
+    if (basicSalary > 0 && rentPaid > 0) {
+      const condition1 = hraReceived; 
+      const condition2 = isMetro ? basicSalary * 0.5 : basicSalary * 0.4;
+      const condition3 = Math.max(0, rentPaid - (basicSalary * 0.1));
+      
+      const exempt = Math.min(condition1, condition2, condition3);
+      setHra(Math.round(exempt));
+    }
+  }, [basicSalary, hraReceived, rentPaid, isMetro]);
 
-// --- Game 1: Jigsaw Puzzle ---
+  // Tax Logic Helpers
+  const calculateSurcharge = (tax, taxableIncome, regime) => {
+    let rate = 0;
+    
+    if (taxableIncome > 5000000 && taxableIncome <= 10000000) rate = 0.10;
+    else if (taxableIncome > 10000000 && taxableIncome <= 20000000) rate = 0.15;
+    else if (taxableIncome > 20000000 && taxableIncome <= 50000000) rate = 0.25;
+    else if (taxableIncome > 50000000) rate = regime === 'new' ? 0.25 : 0.37;
+    
+    if (regime === 'new' && taxableIncome > 20000000) rate = 0.25; 
 
-const JigsawGame = ({ onBack }) => {
-  const [pieces, setPieces] = useState([]);
-  const [slots, setSlots] = useState([]);
-  const [selectedPiece, setSelectedPiece] = useState(null);
-  const [complete, setComplete] = useState(false);
-  const [fullImage, setFullImage] = useState(null);
-  const gridSize = 3; // 3x3 grid
+    if (rate === 0) return { surcharge: 0, marginalRelief: 0 };
+    return { surcharge: tax * rate, marginalRelief: 0, rate }; 
+  };
 
-  // Generate the puzzle image
-  const generatePuzzle = () => {
-    const canvas = document.createElement('canvas');
-    const size = 300;
-    canvas.width = size;
-    canvas.height = size;
-    const ctx = canvas.getContext('2d');
+  const calculateFinalTax = (income, regime) => {
+    let tax = 0;
+    let slabs = [];
+    
+    if (regime === 'old') {
+      let l1 = ageGroup === 'senior' ? 300000 : (ageGroup === 'super' ? 500000 : 250000);
+      let l2 = 500000; let l3 = 1000000;
 
-    // Draw a simple scene (Farm)
-    // Sky
-    ctx.fillStyle = "#87CEEB";
-    ctx.fillRect(0, 0, size, size);
-    // Sun
-    ctx.fillStyle = "#FFD700";
-    ctx.beginPath();
-    ctx.arc(250, 50, 30, 0, Math.PI * 2);
-    ctx.fill();
-    // Grass
-    ctx.fillStyle = "#90EE90";
-    ctx.fillRect(0, 200, size, 100);
-    // House
-    ctx.fillStyle = "#FF6B6B";
-    ctx.fillRect(50, 150, 100, 100);
-    // Roof
-    ctx.fillStyle = "#8B4513";
-    ctx.beginPath();
-    ctx.moveTo(40, 150);
-    ctx.lineTo(100, 90);
-    ctx.lineTo(160, 150);
-    ctx.fill();
-    // Door
-    ctx.fillStyle = "#4A3728";
-    ctx.fillRect(90, 200, 30, 50);
-    // Tree
-    ctx.fillStyle = "#8B4513";
-    ctx.fillRect(220, 160, 20, 80);
-    ctx.fillStyle = "#228B22";
-    ctx.beginPath();
-    ctx.arc(230, 160, 40, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Store full image for reference
-    setFullImage(canvas.toDataURL());
-
-    const pieceSize = size / gridSize;
-    const newPieces = [];
-    const newSlots = [];
-
-    for (let y = 0; y < gridSize; y++) {
-      for (let x = 0; x < gridSize; x++) {
-        const pieceCanvas = document.createElement('canvas');
-        pieceCanvas.width = pieceSize;
-        pieceCanvas.height = pieceSize;
-        const pCtx = pieceCanvas.getContext('2d');
-        
-        pCtx.drawImage(
-          canvas,
-          x * pieceSize, y * pieceSize, pieceSize, pieceSize, // Source
-          0, 0, pieceSize, pieceSize // Dest
-        );
-        
-        // Draw border
-        pCtx.strokeStyle = '#fff';
-        pCtx.lineWidth = 2;
-        pCtx.strokeRect(0, 0, pieceSize, pieceSize);
-
-        const id = y * gridSize + x;
-        newSlots.push({ id, x, y, current: null });
-        newPieces.push({
-          id,
-          img: pieceCanvas.toDataURL(),
-          correctSlot: id
+      if (income > l1) {
+        let val = Math.min(income, l2) - l1;
+        if(val > 0) { tax += val * 0.05; slabs.push({label: '5% Slab', val: val*0.05}); }
+      }
+      if (income > l2) {
+        let val = Math.min(income, l3) - l2;
+        if(val > 0) { tax += val * 0.20; slabs.push({label: '20% Slab', val: val*0.20}); }
+      }
+      if (income > l3) {
+        let val = income - l3;
+        tax += val * 0.30; slabs.push({label: '30% Slab', val: val*0.30}); 
+      }
+    } else {
+      if (fy === '2025-2026') {
+        const limits = [400000, 800000, 1200000, 1600000, 2000000, 2400000];
+        const rates = [0.05, 0.10, 0.15, 0.20, 0.25, 0.30];
+        let prev = limits[0];
+        rates.forEach((rate, i) => {
+          let next = i === rates.length - 1 ? Infinity : limits[i+1];
+          if (income > prev) {
+            let val = Math.min(income, next) - prev;
+            tax += val * rate;
+            slabs.push({label: `${rate*100}% Slab`, val: val * rate});
+          }
+          prev = next;
+        });
+      } else {
+        const ranges = [
+          { min: 300000, max: 700000, rate: 0.05 },
+          { min: 700000, max: 1000000, rate: 0.10 },
+          { min: 1000000, max: 1200000, rate: 0.15 },
+          { min: 1200000, max: 1500000, rate: 0.20 },
+          { min: 1500000, max: Infinity, rate: 0.30 },
+        ];
+        ranges.forEach(r => {
+          if (income > r.min) {
+            let val = Math.min(income, r.max) - r.min;
+            tax += val * r.rate;
+            slabs.push({label: `${r.rate*100}% Slab`, val: val * r.rate});
+          }
         });
       }
     }
 
-    // Shuffle pieces
-    setPieces(newPieces.sort(() => Math.random() - 0.5));
-    setSlots(newSlots);
-    setComplete(false);
-    setSelectedPiece(null);
-  };
-
-  useEffect(() => {
-    generatePuzzle();
-  }, []);
-
-  const handlePieceClick = (piece) => {
-    if (selectedPiece && selectedPiece.id === piece.id) {
-        setSelectedPiece(null); // Deselect
-    } else {
-        setSelectedPiece(piece);
-    }
-  };
-
-  const handleSlotClick = (slotId) => {
-    if (!selectedPiece) return;
-
-    // Check if slot is empty
-    const slotIndex = slots.findIndex(s => s.id === slotId);
-    if (slots[slotIndex].current !== null) return;
-
-    const newSlots = [...slots];
-    newSlots[slotIndex].current = selectedPiece;
-    setSlots(newSlots);
+    let rebate = 0;
+    let rebateLimit = regime === 'old' ? 500000 : (fy === '2025-2026' ? 1200000 : 700000);
     
-    setPieces(pieces.filter(p => p.id !== selectedPiece.id));
-    setSelectedPiece(null);
-
-    // Check win
-    const allFilled = newSlots.every(s => s.current !== null);
-    if (allFilled) {
-      const allCorrect = newSlots.every(s => s.current.id === s.id);
-      if (allCorrect) setComplete(true);
+    if (income <= rebateLimit) {
+      rebate = tax;
+    } else if (regime === 'new') {
+      let excess = income - rebateLimit;
+      if (tax > excess) rebate = tax - excess; 
     }
-  };
+    tax -= rebate;
+    if (tax < 0) tax = 0;
 
-  const handleReset = () => {
-    generatePuzzle();
-  };
-
-  return (
-    <div className="flex flex-col items-center w-full max-w-6xl mx-auto p-2 md:p-4 min-h-screen">
-      {/* Header */}
-      <div className="flex justify-between items-center w-full mb-4">
-        <Button onClick={onBack} variant="outline" className="!px-3 !py-2 text-sm"><ArrowLeft size={16} /> Back</Button>
-        <h2 className="text-xl md:text-2xl font-bold text-blue-600 flex items-center gap-2">
-          <Grid3X3 className="hidden md:block"/> Farm Puzzle
-        </h2>
-        <Button onClick={handleReset} variant="secondary" className="!px-3 !py-2 text-sm"><RefreshCw size={16} /></Button>
-      </div>
-
-      <div className="flex flex-col lg:flex-row gap-6 items-center justify-center w-full flex-grow">
-        
-        {/* Left Column: Reference & Board */}
-        <div className="flex flex-col items-center gap-4">
-            
-            {/* Reference Image (Goal) */}
-            <div className="bg-white p-2 rounded-xl shadow-md border border-blue-100 flex flex-col items-center">
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Goal</span>
-                {fullImage && (
-                    <img src={fullImage} alt="Goal" className="w-32 h-32 md:w-48 md:h-48 rounded-lg border-2 border-gray-200" />
-                )}
-            </div>
-
-            {/* Puzzle Board */}
-            <div className="bg-blue-50 p-2 md:p-4 rounded-xl shadow-inner border-2 border-blue-200">
-                <div className="grid grid-cols-3 gap-0 w-[300px] h-[300px] bg-gray-200 relative shadow-xl">
-                    {complete && <Confetti active={true} />}
-                    {slots.map((slot) => (
-                    <div
-                        key={slot.id}
-                        onClick={() => handleSlotClick(slot.id)}
-                        className={`
-                            w-[100px] h-[100px] border border-gray-300 flex items-center justify-center 
-                            transition-colors duration-200
-                            ${slot.current ? 'bg-white' : 'bg-gray-100'}
-                            ${selectedPiece && !slot.current ? 'bg-blue-100 animate-pulse cursor-pointer' : ''}
-                        `}
-                    >
-                        {slot.current ? (
-                        <img src={slot.current.img} className="w-full h-full block" alt="placed piece" />
-                        ) : (
-                        <div className="text-gray-300 opacity-20 text-4xl font-bold">+</div>
-                        )}
-                    </div>
-                    ))}
-                </div>
-            </div>
-        </div>
-
-        {/* Right Column: Pieces Pool */}
-        <div className="bg-white p-4 rounded-xl shadow-lg border-2 border-blue-100 w-full max-w-[350px] lg:h-[600px] flex flex-col">
-          <h3 className="text-lg font-bold text-gray-500 mb-4 text-center sticky top-0 bg-white z-10 py-2 border-b">
-              {pieces.length > 0 ? "Tap a piece to move it!" : "Great Job!"}
-          </h3>
-          
-          <div className="grid grid-cols-3 gap-3 overflow-y-auto p-2 custom-scrollbar">
-            {pieces.map((piece) => (
-              <div
-                key={piece.id}
-                onClick={() => handlePieceClick(piece)}
-                className={`
-                    cursor-pointer transition-all transform duration-200 rounded-lg overflow-hidden border-2
-                    ${selectedPiece?.id === piece.id 
-                        ? 'ring-4 ring-blue-400 scale-105 border-blue-500 shadow-xl z-10' 
-                        : 'border-transparent hover:scale-105 hover:shadow-md'
-                    }
-                `}
-              >
-                <img src={piece.img} alt="puzzle piece" className="w-full block" />
-              </div>
-            ))}
-            {pieces.length === 0 && !complete && (
-              <div className="col-span-3 text-center text-gray-400 py-8">No pieces left!</div>
-            )}
-            {complete && (
-               <div className="col-span-3 flex flex-col items-center justify-center text-green-500 py-8">
-                 <Trophy size={64} className="mb-4 animate-bounce" />
-                 <span className="font-bold text-xl">Puzzle Solved!</span>
-               </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// --- Game 2: Memory Match ---
-
-const MemoryGame = ({ onBack }) => {
-  const cardsData = ['🐶', '🐱', '🐭', '🐹', '🐰', '🦊'];
-  const [cards, setCards] = useState([]);
-  const [flipped, setFlipped] = useState([]);
-  const [solved, setSolved] = useState([]);
-  const [disabled, setDisabled] = useState(false);
-
-  useEffect(() => {
-    shuffleCards();
-  }, []);
-
-  const shuffleCards = () => {
-    const doubled = [...cardsData, ...cardsData];
-    const shuffled = doubled
-      .sort(() => Math.random() - 0.5)
-      .map((emoji, index) => ({ id: index, emoji }));
-    setCards(shuffled);
-    setFlipped([]);
-    setSolved([]);
-    setDisabled(false);
-  };
-
-  const handleClick = (id) => {
-    if (disabled || flipped.includes(id) || solved.includes(id)) return;
-
-    if (flipped.length === 0) {
-      setFlipped([id]);
-      return;
+    let surchargeData = calculateSurcharge(tax, income, regime);
+    let surcharge = surchargeData.surcharge;
+    
+    // Simplified Surcharge MR Approximation
+    if(surcharge > 0 && (income - 5000000 < surcharge || income - 10000000 < surcharge)) {
+        // Full MR logic simplified for display
     }
 
-    if (flipped.length === 1) {
-      setDisabled(true);
-      const firstId = flipped[0];
-      const secondId = id;
-      setFlipped([firstId, secondId]);
-
-      if (cards[firstId].emoji === cards[secondId].emoji) {
-        setSolved([...solved, firstId, secondId]);
-        setFlipped([]);
-        setDisabled(false);
-      } else {
-        setTimeout(() => {
-          setFlipped([]);
-          setDisabled(false);
-        }, 1000);
-      }
-    }
+    let cess = (tax + surcharge) * 0.04;
+    
+    return {
+      baseTax: tax + rebate, 
+      actualRebate: rebate,
+      surcharge,
+      marginalRelief: surchargeData.marginalRelief,
+      cess,
+      totalTax: tax + surcharge + cess,
+      slabs
+    };
   };
 
-  return (
-    <div className="flex flex-col items-center w-full max-w-4xl mx-auto p-4 min-h-screen">
-      <div className="flex justify-between w-full mb-6">
-        <Button onClick={onBack} variant="outline" className="!px-3 !py-2 text-sm"><ArrowLeft size={16} /> Back</Button>
-        <h2 className="text-2xl font-bold text-purple-600 flex items-center gap-2">
-          <Brain /> Memory Match
-        </h2>
-        <Button onClick={shuffleCards} variant="secondary" className="!px-3 !py-2 text-sm"><RefreshCw size={16} /></Button>
-      </div>
+  const results = useMemo(() => {
+    const totalIncome = grossSalary + otherIncome + interestIncome;
 
-      <div className="grid grid-cols-3 md:grid-cols-4 gap-4 w-full max-w-md my-auto">
-        {cards.map((card) => {
-          const isFlipped = flipped.includes(card.id) || solved.includes(card.id);
-          const isSolved = solved.includes(card.id);
-          return (
-            <div
-              key={card.id}
-              onClick={() => handleClick(card.id)}
-              className={`
-                aspect-square rounded-xl cursor-pointer shadow-lg
-                flex items-center justify-center text-4xl transition-all duration-300 transform
-                ${isFlipped ? 'bg-white rotate-y-180' : 'bg-purple-500'}
-                ${isSolved ? 'bg-green-100 ring-4 ring-green-400' : ''}
-                active:scale-95 hover:scale-105
-              `}
-            >
-              {isFlipped ? card.emoji : <span className="text-white text-2xl font-bold">?</span>}
-            </div>
-          );
-        })}
-      </div>
-      
-      {solved.length === cards.length && cards.length > 0 && (
-        <div className="mt-8 text-center animate-bounce">
-          <h3 className="text-3xl font-bold text-green-600">You Won! 🎉</h3>
-          <Confetti active={true} />
-        </div>
-      )}
-    </div>
-  );
-};
-
-// --- Game 3: Shape Sorter ---
-
-const SortGame = ({ onBack }) => {
-  const categories = {
-    fruit: { label: 'Fruits', color: 'bg-red-100 border-red-300 text-red-600', bg: 'bg-red-50', icon: '🍎' },
-    animal: { label: 'Animals', color: 'bg-green-100 border-green-300 text-green-600', bg: 'bg-green-50', icon: '🐾' }
-  };
-  
-  const itemsData = [
-    { id: 1, type: 'fruit', content: '🍎' },
-    { id: 2, type: 'fruit', content: '🍌' },
-    { id: 3, type: 'fruit', content: '🍇' },
-    { id: 4, type: 'fruit', content: '🍓' },
-    { id: 5, type: 'animal', content: '🐶' },
-    { id: 6, type: 'animal', content: '🐱' },
-    { id: 7, type: 'animal', content: '🦁' },
-    { id: 8, type: 'animal', content: '🐮' },
-  ];
-
-  const [items, setItems] = useState([]);
-  const [selectedItem, setSelectedItem] = useState(null);
-  const [score, setScore] = useState(0);
-
-  useEffect(() => {
-    resetGame();
-  }, []);
-
-  const resetGame = () => {
-    setItems(itemsData.sort(() => Math.random() - 0.5));
-    setScore(0);
-    setSelectedItem(null);
-  };
-
-  // Mobile friendly: Tap item to select, tap box to drop
-  const handleItemClick = (item) => {
-    if (selectedItem?.id === item.id) {
-        setSelectedItem(null);
+    // --- Deductions Logic ---
+    const valid80C = Math.min(basicDeduction80C, 150000);
+    
+    // 80D Split Logic
+    const limitSelf = ageGroup === 'general' ? 25000 : 50000;
+    const limitParents = parentsSenior ? 50000 : 25000;
+    const valid80D = Math.min(medicalSelf, limitSelf) + Math.min(medicalParents, limitParents);
+    
+    const valid80CCD = Math.min(nps80CCD1B, 50000);
+    const validHomeLoan = Math.min(homeLoanInterest, 200000);
+    
+    // 80TTA/TTB Logic
+    let valid80TTA_TTB = 0;
+    if (ageGroup === 'general') {
+       // 80TTA (Savings Interest only, max 10k)
+       valid80TTA_TTB = Math.min(interestIncome, 10000);
     } else {
-        setSelectedItem(item);
+       // 80TTB (All interest, max 50k)
+       valid80TTA_TTB = Math.min(interestIncome, 50000);
     }
-  };
 
-  const handleCategoryClick = (categoryKey) => {
-      if (!selectedItem) return;
+    const totalOldDeductions = valid80C + valid80D + valid80CCD + hra + validHomeLoan + professionalTax + otherDeductions + 50000 + valid80TTA_TTB; 
+    const oldTaxableIncome = Math.max(0, totalIncome - totalOldDeductions);
 
-      if (selectedItem.type === categoryKey) {
-        // Correct
-        setItems(items.filter(i => i.id !== selectedItem.id));
-        setScore(s => s + 1);
-        setSelectedItem(null);
-      } else {
-          // Wrong shake effect could go here
-          setSelectedItem(null);
-      }
-  }
+    const newRegimeDeductions = STANDARD_DEDUCTION; 
+    const newTaxableIncome = Math.max(0, totalIncome - newRegimeDeductions);
+
+    const oldRes = calculateFinalTax(oldTaxableIncome, 'old');
+    const newRes = calculateFinalTax(newTaxableIncome, 'new');
+
+    return {
+      totalIncome,
+      old: { ...oldRes, taxableIncome: oldTaxableIncome, deductions: totalOldDeductions, deductionBreakdown: { tta: valid80TTA_TTB, d80: valid80D } },
+      new: { ...newRes, taxableIncome: newTaxableIncome, deductions: newRegimeDeductions }
+    };
+  }, [fy, ageGroup, grossSalary, otherIncome, interestIncome, basicDeduction80C, medicalSelf, medicalParents, parentsSenior, nps80CCD1B, hra, homeLoanInterest, professionalTax, otherDeductions]);
+
+  // --- Dynamic Tax Tips Logic ---
+  const taxTips = useMemo(() => {
+    const tips = [];
+    if (results.totalIncome === 0) return tips;
+
+    const oldTaxable = results.old.taxableIncome;
+    let bracketRate = 0.05;
+    if (oldTaxable > 1000000) bracketRate = 0.30;
+    else if (oldTaxable > 500000) bracketRate = 0.20;
+    
+    if (basicDeduction80C < 150000) {
+      const gap = 150000 - basicDeduction80C;
+      tips.push({
+        id: '80c', title: "Maximize Section 80C",
+        desc: `Invest ₹${gap.toLocaleString()} more in ELSS/PPF.`,
+        savings: Math.round(gap * bracketRate * 1.04).toLocaleString(),
+        icon: <TrendingUp className="w-5 h-5 text-green-600" />
+      });
+    }
+
+    if (nps80CCD1B < 50000) {
+      const gap = 50000 - nps80CCD1B;
+      tips.push({
+        id: 'nps', title: "NPS Benefit (80CCD 1B)",
+        desc: `Invest ₹${gap.toLocaleString()} in NPS.`,
+        savings: Math.round(gap * bracketRate * 1.04).toLocaleString(),
+        icon: <Building className="w-5 h-5 text-blue-600" />
+      });
+    }
+
+    if (medicalSelf === 0) {
+       tips.push({
+        id: '80d', title: "Health Insurance (Self)",
+        desc: "Buying medical insurance saves tax.",
+        savings: "~5,000+", icon: <Shield className="w-5 h-5 text-red-600" />
+      });
+    }
+
+    return tips;
+  }, [results, basicDeduction80C, nps80CCD1B, medicalSelf, ageGroup]);
+
+  const savings = results.old.totalTax - results.new.totalTax;
+  const recommendation = savings > 0 ? 'New Regime' : 'Old Regime';
+  const savingsAmount = Math.abs(savings);
+  
+  const maxTax = Math.max(results.old.totalTax, results.new.totalTax, 1);
+  const oldWidth = (results.old.totalTax / maxTax) * 100;
+  const newWidth = (results.new.totalTax / maxTax) * 100;
 
   return (
-    <div className="flex flex-col items-center w-full max-w-4xl mx-auto p-4 min-h-screen">
-      <div className="flex justify-between w-full mb-6">
-        <Button onClick={onBack} variant="outline" className="!px-3 !py-2 text-sm"><ArrowLeft size={16} /> Back</Button>
-        <h2 className="text-2xl font-bold text-orange-600 flex items-center gap-2">
-          <Shapes /> Sort It Out!
-        </h2>
-        <Button onClick={resetGame} variant="secondary" className="!px-3 !py-2 text-sm"><RefreshCw size={16} /></Button>
-      </div>
-
-      <div className="text-xl font-bold text-gray-700 mb-6 bg-white px-4 py-2 rounded-full shadow-sm">
-        {items.length > 0 ? "Tap an item, then tap its box!" : "Complete!"}
-      </div>
-
-      {items.length === 0 ? (
-         <div className="text-center py-12 flex-grow flex flex-col justify-center items-center">
-            <h3 className="text-4xl font-bold text-green-600 mb-4">All Sorted! 🎉</h3>
-             <Button onClick={resetGame} variant="success">Play Again</Button>
-             <Confetti active={true} />
-         </div>
-      ) : (
-        <div className="flex flex-wrap gap-4 justify-center mb-12 min-h-[100px] content-start">
-          {items.map((item) => (
-            <div
-              key={item.id}
-              onClick={() => handleItemClick(item)}
-              className={`
-                w-16 h-16 md:w-20 md:h-20 bg-white rounded-full shadow-md flex items-center justify-center text-4xl cursor-pointer transition-all
-                ${selectedItem?.id === item.id ? 'ring-4 ring-orange-400 scale-110 -translate-y-2' : 'hover:scale-105'}
-              `}
-            >
-              {item.content}
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="grid grid-cols-2 gap-4 md:gap-8 w-full max-w-2xl mt-auto md:mt-0 mb-8">
-        {Object.entries(categories).map(([key, cat]) => (
-          <div
-            key={key}
-            onClick={() => handleCategoryClick(key)}
-            className={`
-              h-40 md:h-64 rounded-2xl border-4 border-dashed flex flex-col items-center justify-center transition-all cursor-pointer
-              ${cat.color} ${cat.bg}
-              ${selectedItem ? 'animate-pulse ring-2 ring-offset-2 ring-gray-200' : ''}
-              active:scale-95
-            `}
-          >
-            <span className="text-5xl md:text-7xl mb-4">{cat.icon}</span>
-            <span className="text-xl md:text-2xl font-bold uppercase tracking-wider">{cat.label}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-// --- Main App ---
-
-const App = () => {
-  const [view, setView] = useState('menu');
-
-  useEffect(() => {
-      document.title = "Kids Puzzle Playground - Educational Games";
-  }, []);
-
-  const renderView = () => {
-    switch(view) {
-      case 'jigsaw': return <JigsawGame onBack={() => setView('menu')} />;
-      case 'memory': return <MemoryGame onBack={() => setView('menu')} />;
-      case 'sort': return <SortGame onBack={() => setView('menu')} />;
-      default: return (
-        <div className="flex flex-col items-center justify-center min-h-[80vh] gap-8 p-4 text-center">
-          <div className="animate-fade-in-down">
-            <h1 className="text-4xl md:text-6xl font-black text-slate-800 tracking-tight mb-2 drop-shadow-sm">
-                🧩 Kids Puzzle
-            </h1>
-            <h2 className="text-3xl md:text-5xl font-black text-blue-500 tracking-tight">
-                Playground
-            </h2>
-          </div>
-          
-          <p className="text-lg text-gray-500 max-w-md mb-4">
-            Fun, safe, and educational games designed for little hands.
-          </p>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl px-4">
-            <button 
-              onClick={() => setView('jigsaw')}
-              className="group bg-white p-6 rounded-3xl shadow-xl hover:shadow-2xl transition-all transform hover:-translate-y-2 border-b-8 border-blue-200 active:border-b-0 active:translate-y-1 flex flex-col items-center gap-4"
-            >
-              <div className="w-24 h-24 bg-blue-100 rounded-full flex items-center justify-center text-blue-500 group-hover:rotate-12 transition-transform duration-300">
-                <Grid3X3 size={48} />
-              </div>
-              <div>
-                <h3 className="text-2xl font-bold text-gray-800">Jigsaw</h3>
-                <p className="text-gray-400 font-medium">Build the Farm</p>
-              </div>
-            </button>
-
-            <button 
-              onClick={() => setView('memory')}
-              className="group bg-white p-6 rounded-3xl shadow-xl hover:shadow-2xl transition-all transform hover:-translate-y-2 border-b-8 border-purple-200 active:border-b-0 active:translate-y-1 flex flex-col items-center gap-4"
-            >
-              <div className="w-24 h-24 bg-purple-100 rounded-full flex items-center justify-center text-purple-500 group-hover:rotate-12 transition-transform duration-300">
-                <Brain size={48} />
-              </div>
-              <div>
-                <h3 className="text-2xl font-bold text-gray-800">Memory</h3>
-                <p className="text-gray-400 font-medium">Find Pairs</p>
-              </div>
-            </button>
-
-            <button 
-              onClick={() => setView('sort')}
-              className="group bg-white p-6 rounded-3xl shadow-xl hover:shadow-2xl transition-all transform hover:-translate-y-2 border-b-8 border-orange-200 active:border-b-0 active:translate-y-1 flex flex-col items-center gap-4"
-            >
-              <div className="w-24 h-24 bg-orange-100 rounded-full flex items-center justify-center text-orange-500 group-hover:rotate-12 transition-transform duration-300">
-                <Shapes size={48} />
-              </div>
-              <div>
-                <h3 className="text-2xl font-bold text-gray-800">Sorting</h3>
-                <p className="text-gray-400 font-medium">Fruits & Animals</p>
-              </div>
-            </button>
-          </div>
-        </div>
-      );
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-blue-50 to-white font-sans text-slate-800 flex flex-col">
-      <header className="p-4 border-b border-white/50 bg-white/50 backdrop-blur-sm sticky top-0 z-20 shadow-sm">
-        <div className="max-w-6xl mx-auto flex items-center justify-center relative">
-             <span className="font-black text-xl tracking-wider text-blue-600 opacity-80 flex items-center gap-2">
-                <Star className="text-yellow-400 fill-current" size={20}/> TOY BOX
-             </span>
-        </div>
-      </header>
+    <div className="min-h-screen bg-slate-50/50 font-sans text-slate-800 print:bg-white">
       
-      <main className="flex-grow">
-        {renderView()}
-      </main>
+      {/* Print-specific styles */}
+      <style>{`
+        @media print {
+          .print\\:hidden { display: none !important; }
+          .print\\:bg-white { background: white !important; }
+          .print\\:shadow-none { box-shadow: none !important; }
+          .print\\:border-none { border: none !important; }
+          .print\\:text-black { color: black !important; }
+          body { -webkit-print-color-adjust: exact; }
+        }
+      `}</style>
 
-      <footer className="p-6 text-center text-slate-400 text-sm font-medium bg-slate-50 border-t border-slate-100">
-          <p>© {new Date().getFullYear()} Kids Puzzle Playground</p>
-          <p className="mt-1 text-slate-500">Developed by <span className="text-blue-500 font-bold">Vivek Narkhede</span></p>
-      </footer>
+      {/* Top Banner Background (Hidden on Print) */}
+      <div className="bg-gradient-to-r from-blue-900 to-indigo-900 h-64 w-full absolute top-0 left-0 z-0 print:hidden"></div>
+
+      <div className="max-w-7xl mx-auto px-4 md:px-8 relative z-10 pt-10">
+        
+        {/* Header with Semantic Tag */}
+        <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6">
+          <div className="text-white print:text-black">
+            <h1 className="text-3xl md:text-4xl font-bold flex items-center gap-3">
+              <div className="bg-white/10 p-2 rounded-xl backdrop-blur-sm border border-white/20 print:hidden">
+                <Calculator className="w-8 h-8 text-blue-200" aria-hidden="true" />
+              </div>
+              Indian Tax Calculator
+            </h1>
+            <p className="text-blue-200 mt-2 text-lg font-light print:text-slate-500">
+              FY {fy} | Comparison Report
+            </p>
+            <div className="text-blue-300/80 text-sm mt-1 font-medium flex items-center gap-1 print:text-black">
+              Designed & Developed by Vivek Narkhede
+            </div>
+          </div>
+          
+          <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto print:hidden">
+            <button onClick={handleReset} className="px-4 py-3 bg-white/10 text-white rounded-xl hover:bg-white/20 transition backdrop-blur-md border border-white/10 flex items-center justify-center gap-2 font-medium">
+               <RotateCcw className="w-4 h-4" /> Reset
+            </button>
+            <button onClick={handlePrint} className="px-4 py-3 bg-white text-blue-900 rounded-xl hover:bg-blue-50 transition shadow-lg flex items-center justify-center gap-2 font-bold">
+               <Printer className="w-4 h-4" /> Print Summary
+            </button>
+            
+            {/* Year & Age Selectors */}
+            <div className="relative">
+               <select aria-label="Financial Year" value={fy} onChange={(e) => setFy(e.target.value)} className="appearance-none w-full bg-blue-800/50 backdrop-blur-md border border-white/20 text-white text-sm rounded-xl px-4 py-3 pr-10 font-medium cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-400">
+                <option value="2025-2026" className="text-slate-800">FY 2025-26</option>
+                <option value="2024-2025" className="text-slate-800">FY 2024-25</option>
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-200 pointer-events-none" />
+            </div>
+            <div className="relative">
+              <select aria-label="Age Group" value={ageGroup} onChange={(e) => setAgeGroup(e.target.value)} className="appearance-none w-full bg-blue-800/50 backdrop-blur-md border border-white/20 text-white text-sm rounded-xl px-4 py-3 pr-10 font-medium cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-400">
+                <option value="general" className="text-slate-800">Age &lt; 60</option>
+                <option value="senior" className="text-slate-800">Age 60-80</option>
+                <option value="super" className="text-slate-800">Age 80+</option>
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-200 pointer-events-none" />
+            </div>
+          </div>
+        </header>
+
+        <main className="grid grid-cols-1 lg:grid-cols-12 gap-8 pb-12">
+          
+          {/* Left Column: Inputs (Hidden on Print) */}
+          <div className="lg:col-span-7 space-y-6 print:hidden">
+            
+            {/* Income Section */}
+            <section aria-labelledby="income-heading">
+              <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+                <h2 id="income-heading" className="text-lg font-bold mb-6 flex items-center gap-3 text-slate-800">
+                  <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center" aria-hidden="true">
+                    <Wallet className="w-5 h-5 text-blue-600" />
+                  </div>
+                  Income Details
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
+                  <InputGroup label="Gross Salary / CTC" value={grossSalary} onChange={setGrossSalary} tooltip="Total annual salary before any deductions." />
+                  <InputGroup label="Other Income" value={otherIncome} onChange={setOtherIncome} tooltip="Business, Freelance, or Rental Income." />
+                  <InputGroup label="Interest Income" value={interestIncome} onChange={setInterestIncome} tooltip="Savings Bank Interest, FD Interest. Auto-calculates 80TTA/TTB exemption." />
+                </div>
+              </div>
+            </section>
+
+            {/* Deductions Section */}
+            <section aria-labelledby="deductions-heading">
+              <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-teal-50 rounded-bl-full -mr-8 -mt-8 z-0"></div>
+                <h2 id="deductions-heading" className="text-lg font-bold mb-6 flex items-center gap-3 text-slate-800 relative z-10">
+                  <div className="w-10 h-10 rounded-full bg-teal-100 flex items-center justify-center" aria-hidden="true">
+                    <PieChart className="w-5 h-5 text-teal-600" />
+                  </div>
+                  Deductions (Old Regime)
+                </h2>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 relative z-10">
+                  <InputGroup label="Section 80C" value={basicDeduction80C} onChange={setBasicDeduction80C} tooltip="EPF, PPF, ELSS, LIC. Max ₹1.5L." icon={TrendingUp} />
+                  
+                  {/* Advanced 80D Section */}
+                  <div className="col-span-1 md:col-span-2 mb-6 p-4 bg-slate-50/80 rounded-xl border border-slate-200">
+                    <div className="flex items-center gap-2 mb-3">
+                        <Shield className="w-4 h-4 text-slate-400" aria-hidden="true" />
+                        <label className="text-sm font-semibold text-slate-700">Medical Insurance (80D)</label>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label className="text-xs text-slate-500 font-medium mb-1 block">Self & Family</label>
+                            <div className="relative">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">₹</span>
+                                <input 
+                                  type="number" 
+                                  value={medicalSelf || ''} 
+                                  onChange={e => setMedicalSelf(Number(e.target.value))} 
+                                  className="w-full pl-7 py-2.5 text-base border rounded-lg focus:ring-2 focus:ring-blue-500/20" 
+                                  placeholder="0" 
+                                  aria-label="Medical Insurance Self"
+                                />
+                            </div>
+                            <div className="text-[10px] text-slate-400 mt-1">Max: ₹{ageGroup === 'general' ? '25k' : '50k'}</div>
+                        </div>
+                        <div>
+                            <div className="flex justify-between">
+                                <label className="text-xs text-slate-500 font-medium mb-1 block">Parents</label>
+                                <label className="flex items-center gap-1 text-[10px] cursor-pointer">
+                                    <input type="checkbox" checked={parentsSenior} onChange={e => setParentsSenior(e.target.checked)} className="rounded w-3.5 h-3.5" />
+                                    Parents &gt; 60?
+                                </label>
+                            </div>
+                            <div className="relative">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">₹</span>
+                                <input 
+                                  type="number" 
+                                  value={medicalParents || ''} 
+                                  onChange={e => setMedicalParents(Number(e.target.value))} 
+                                  className="w-full pl-7 py-2.5 text-base border rounded-lg focus:ring-2 focus:ring-blue-500/20" 
+                                  placeholder="0" 
+                                  aria-label="Medical Insurance Parents"
+                                />
+                            </div>
+                            <div className="text-[10px] text-slate-400 mt-1">Max: ₹{parentsSenior ? '50k' : '25k'}</div>
+                        </div>
+                    </div>
+                  </div>
+
+                  {/* HRA with built-in calculator */}
+                  <div className="col-span-1 md:col-span-2 bg-gradient-to-br from-slate-50 to-white p-5 rounded-2xl border border-slate-200 mb-6 shadow-sm">
+                    <div className="flex justify-between items-center mb-4">
+                      <div className="flex items-center gap-2">
+                        <Building className="w-4 h-4 text-slate-400" aria-hidden="true" />
+                        <label className="text-sm font-semibold text-slate-700">HRA Exemption</label>
+                      </div>
+                      <button 
+                        onClick={() => setShowHraCalc(!showHraCalc)}
+                        className="text-xs bg-white border border-slate-200 px-3 py-2 rounded-full text-blue-600 font-semibold hover:bg-blue-50 transition-colors shadow-sm flex items-center gap-1.5 touch-manipulation"
+                      >
+                        {showHraCalc ? 'Close Helper' : 'Calculate HRA'}
+                        <ArrowRight className="w-3 h-3" />
+                      </button>
+                    </div>
+                    
+                    {showHraCalc && (
+                      <div className="mb-5 p-4 bg-white rounded-xl border border-blue-100 grid grid-cols-1 md:grid-cols-2 gap-4 animate-in slide-in-from-top-2 shadow-sm">
+                         <div>
+                           <label className="text-xs font-semibold text-slate-500 block mb-1.5 uppercase tracking-wide">Basic Salary</label>
+                           <input type="number" className="w-full text-base p-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 outline-none" placeholder="Basic" value={basicSalary || ''} onChange={e => setBasicSalary(Number(e.target.value))} />
+                         </div>
+                         <div>
+                           <label className="text-xs font-semibold text-slate-500 block mb-1.5 uppercase tracking-wide">HRA Received</label>
+                           <input type="number" className="w-full text-base p-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 outline-none" placeholder="Received" value={hraReceived || ''} onChange={e => setHraReceived(Number(e.target.value))} />
+                         </div>
+                         <div>
+                           <label className="text-xs font-semibold text-slate-500 block mb-1.5 uppercase tracking-wide">Rent Paid (Annual)</label>
+                           <input type="number" className="w-full text-base p-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 outline-none" placeholder="Rent" value={rentPaid || ''} onChange={e => setRentPaid(Number(e.target.value))} />
+                         </div>
+                         <div className="flex items-end pb-2">
+                           <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer select-none">
+                             <input type="checkbox" checked={isMetro} onChange={e => setIsMetro(e.target.checked)} className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300" />
+                             Live in Metro City?
+                           </label>
+                         </div>
+                         <div className="col-span-full mt-1">
+                           <div className="flex justify-between items-center bg-green-50 px-4 py-2 rounded-lg border border-green-100">
+                              <span className="text-xs font-semibold text-green-800 uppercase">Exemption Calculated</span>
+                              <span className="font-mono font-bold text-green-700">₹{hra.toLocaleString('en-IN')}</span>
+                           </div>
+                         </div>
+                      </div>
+                    )}
+
+                    <div className="relative group">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium group-focus-within:text-blue-500">₹</span>
+                      <input 
+                        type="number" 
+                        value={hra || ''} 
+                        onChange={(e) => setHra(Number(e.target.value))} 
+                        className="w-full pl-8 pr-4 py-3 text-base bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium" 
+                        placeholder="0"
+                        aria-label="HRA Amount"
+                      />
+                    </div>
+                  </div>
+
+                  <InputGroup label="Home Loan Interest" value={homeLoanInterest} onChange={setHomeLoanInterest} tooltip="Interest on home loan (Self-occupied). Max ₹2L." />
+                  <InputGroup label="NPS (80CCD 1B)" value={nps80CCD1B} onChange={setNps80CCD1B} tooltip="Additional NPS deduction. Max ₹50,000." />
+                   <InputGroup label="Professional Tax" value={professionalTax} onChange={setProfessionalTax} tooltip="Usually ₹200/month (₹2500/yr)." />
+                  <InputGroup label="Other Deductions" value={otherDeductions} onChange={setOtherDeductions} tooltip="LTA, 80E, 80G, etc." />
+                </div>
+              </div>
+            </section>
+          </div>
+
+          {/* Right Column: Results - Sticky Sidebar (Full width on print) */}
+          <div className="lg:col-span-5 space-y-6 lg:sticky lg:top-6 self-start print:col-span-12 print:static">
+            
+            {/* Recommendation Card */}
+            <Card className="p-0 border-0 shadow-xl overflow-hidden relative print:shadow-none print:border print:border-slate-300">
+              <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-900 print:hidden"></div>
+              
+              {/* Confetti / Decoration overlay */}
+              <div className="absolute top-0 right-0 p-4 opacity-10 print:hidden">
+                <CheckCircle className="w-32 h-32 text-white" />
+              </div>
+
+              <div className="relative p-6 text-white print:text-black">
+                <div className="flex justify-between items-start mb-6">
+                  <div>
+                    <div className="text-indigo-200 text-xs font-bold uppercase tracking-widest mb-2 print:text-slate-500">Recommendation</div>
+                    <div className="text-3xl font-bold text-white flex items-center gap-2 print:text-black">
+                      {recommendation}
+                    </div>
+                  </div>
+                  {savingsAmount > 0 && (
+                    <div className="text-right bg-white/10 backdrop-blur-md px-4 py-2 rounded-lg border border-white/10 print:border-slate-200 print:bg-slate-100">
+                      <div className="text-indigo-200 text-xs font-bold uppercase mb-0.5 print:text-slate-500">You save</div>
+                      <div className="text-2xl font-bold text-emerald-400 print:text-green-700">₹{savingsAmount.toLocaleString('en-IN')}</div>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Visual Bar Comparison */}
+                <div className="space-y-4 print:hidden">
+                   <div className="relative h-11 w-full bg-slate-900/50 rounded-lg overflow-hidden flex items-center px-4 border border-white/5">
+                      <div className="absolute left-0 top-0 bottom-0 bg-gradient-to-r from-rose-500 to-rose-600 transition-all duration-1000 ease-out" style={{width: `${Math.max(oldWidth, 2)}%`}}></div>
+                      <div className="relative z-10 flex justify-between w-full text-sm font-semibold text-white drop-shadow-md">
+                         <span>Old Regime</span>
+                         <span>₹{results.old.totalTax.toLocaleString('en-IN')}</span>
+                      </div>
+                   </div>
+                   <div className="relative h-11 w-full bg-slate-900/50 rounded-lg overflow-hidden flex items-center px-4 border border-white/5">
+                      <div className="absolute left-0 top-0 bottom-0 bg-gradient-to-r from-emerald-500 to-emerald-600 transition-all duration-1000 ease-out" style={{width: `${Math.max(newWidth, 2)}%`}}></div>
+                      <div className="relative z-10 flex justify-between w-full text-sm font-semibold text-white drop-shadow-md">
+                         <span>New Regime</span>
+                         <span>₹{results.new.totalTax.toLocaleString('en-IN')}</span>
+                      </div>
+                   </div>
+                </div>
+              </div>
+            </Card>
+
+            {/* Smart Tax Tips Widget (Hidden on Print) */}
+            {taxTips.length > 0 && (
+              <Card className="p-5 border-l-4 border-l-indigo-500 print:hidden">
+                <h3 className="flex items-center gap-2 font-bold text-slate-800 mb-4">
+                  <Lightbulb className="w-5 h-5 text-amber-500 fill-amber-500" aria-hidden="true" />
+                  Tax Saving Ideas
+                </h3>
+                <div className="space-y-3">
+                  {taxTips.map(tip => (
+                    <TipCard 
+                      key={tip.id} 
+                      icon={tip.icon} 
+                      title={tip.title} 
+                      desc={tip.desc} 
+                      savings={tip.savings} 
+                    />
+                  ))}
+                </div>
+              </Card>
+            )}
+
+            {/* Quick Summary Accordion */}
+            <Card className="p-0 print:border print:border-slate-300">
+              <div className="bg-slate-50/80 p-5 border-b border-slate-100 flex justify-between items-center print:bg-white print:border-b-2">
+                <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                  Tax Summary
+                </h3>
+                <span className="text-xs font-bold px-2.5 py-1 bg-white border border-slate-200 text-slate-500 rounded-md shadow-sm print:border-black">
+                   FY {fy.replace('20', '').replace('20', '')}
+                </span>
+              </div>
+              <div className="p-5 space-y-1">
+                 <ResultRow label="Taxable Income" oldVal={results.old.taxableIncome} newVal={results.new.taxableIncome} highlight />
+                 <ResultRow label="Tax Calculated" oldVal={Math.round(results.old.baseTax)} newVal={Math.round(results.new.baseTax)} />
+                 {(results.old.actualRebate > 0 || results.new.actualRebate > 0) && (
+                   <ResultRow label="Rebate 87A" oldVal={Math.round(results.old.actualRebate)} newVal={Math.round(results.new.actualRebate)} />
+                 )}
+                 {(results.old.surcharge > 0 || results.new.surcharge > 0) && (
+                   <ResultRow label="Surcharge" oldVal={Math.round(results.old.surcharge)} newVal={Math.round(results.new.surcharge)} />
+                 )}
+                 <ResultRow label="Cess (4%)" oldVal={Math.round(results.old.cess)} newVal={Math.round(results.new.cess)} />
+                 <div className="pt-4 mt-3 border-t border-slate-100 print:border-black">
+                    <ResultRow label="Net Tax Payable" oldVal={Math.round(results.old.totalTax)} newVal={Math.round(results.new.totalTax)} isTotal />
+                 </div>
+                 
+                 {/* Print Only Deduction Breakdown */}
+                 <div className="hidden print:block mt-8 pt-4 border-t border-dashed border-slate-300">
+                    <h4 className="text-xs font-bold uppercase text-slate-500 mb-2">Deductions Used (Old Regime)</h4>
+                    <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm">
+                        <div className="flex justify-between"><span>80C</span><span>₹{Math.min(basicDeduction80C, 150000).toLocaleString()}</span></div>
+                        <div className="flex justify-between"><span>80D (Medical)</span><span>₹{results.old.deductionBreakdown.d80.toLocaleString()}</span></div>
+                        <div className="flex justify-between"><span>80TTA/TTB (Interest)</span><span>₹{results.old.deductionBreakdown.tta.toLocaleString()}</span></div>
+                        <div className="flex justify-between"><span>HRA</span><span>₹{hra.toLocaleString()}</span></div>
+                        <div className="flex justify-between"><span>NPS</span><span>₹{Math.min(nps80CCD1B, 50000).toLocaleString()}</span></div>
+                        <div className="flex justify-between font-bold border-t mt-1 pt-1"><span>Total</span><span>₹{results.old.deductions.toLocaleString()}</span></div>
+                    </div>
+                 </div>
+              </div>
+
+              {/* Breakdown Toggle (Hidden on Print) */}
+              <button 
+                onClick={() => setShowBreakdown(!showBreakdown)}
+                className="w-full py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-center gap-2 text-slate-600 font-semibold text-sm hover:text-blue-600 hover:bg-slate-100 transition-colors print:hidden touch-manipulation"
+              >
+                {showBreakdown ? 'Hide Detailed Calculation' : 'Show Detailed Calculation'}
+                {showBreakdown ? <ChevronUp className="w-4 h-4"/> : <ChevronDown className="w-4 h-4"/>}
+              </button>
+
+              {showBreakdown && (
+                <div className="p-5 border-t border-slate-100 bg-slate-50/50 animate-in slide-in-from-top-2 print:hidden">
+                  <h4 className="font-bold text-xs text-slate-400 uppercase tracking-wider mb-3">New Regime Slabs</h4>
+                  <div className="space-y-2 text-sm mb-6">
+                    {results.new.slabs.map((slab, idx) => (
+                      <div key={idx} className="flex justify-between py-1 text-slate-600">
+                        <span>{slab.label}</span>
+                        <span className="font-mono text-slate-800">₹{Math.round(slab.val).toLocaleString('en-IN')}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <h4 className="font-bold text-xs text-slate-400 uppercase tracking-wider mb-3">Old Regime Slabs</h4>
+                  <div className="space-y-2 text-sm">
+                    {results.old.slabs.map((slab, idx) => (
+                      <div key={idx} className="flex justify-between py-1 text-slate-600">
+                        <span>{slab.label}</span>
+                        <span className="font-mono text-slate-800">₹{Math.round(slab.val).toLocaleString('en-IN')}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </Card>
+
+            <div className="text-center text-xs text-slate-400 mt-4 print:text-black print:text-left print:mt-12">
+               * This report is for estimation purposes only. Generated on {new Date().toLocaleDateString()}.
+            </div>
+
+          </div>
+        </main>
+      </div>
     </div>
   );
-};
-
-export default App;
+}
