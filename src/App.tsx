@@ -13,7 +13,7 @@ import {
   Search, Loader2, AlertCircle, Landmark, CalendarClock, Banknote, FileText, 
   Download, Printer, FileSpreadsheet, Database, Lightbulb, Zap, LogOut, Settings,
   Shield, ShieldAlert, Calendar, Repeat, BellRing, Droplets, Sparkles, TrendingDown,
-  ThumbsUp, AlertOctagon, Pencil
+  ThumbsUp, AlertOctagon, Pencil, Menu, X
 } from 'lucide-react';
 import { 
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, 
@@ -104,11 +104,11 @@ const downloadMasterBackup = (data: any) => {
 const Modal = ({ isOpen, onClose, title, children }: any) => {
   if (!isOpen) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-fade-in print:hidden">
-      <div className={`w-[95%] md:w-full max-w-md overflow-hidden animate-scale-in max-h-[90vh] overflow-y-auto rounded-2xl ${GLASS_CLASSES}`}>
-        <div className="flex justify-between items-center p-5 border-b border-white/10 sticky top-0 bg-slate-900/50 backdrop-blur-md z-10">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in print:hidden">
+      <div className={`w-full md:w-full max-w-md overflow-hidden animate-scale-in max-h-[90vh] overflow-y-auto rounded-2xl ${GLASS_CLASSES}`}>
+        <div className="flex justify-between items-center p-5 border-b border-white/10 sticky top-0 bg-slate-900/90 backdrop-blur-md z-10">
           <h3 className="text-lg font-bold text-white tracking-wide">{title}</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors bg-white/5 p-2 rounded-full"><Plus className="w-5 h-5 rotate-45" /></button>
+          <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors bg-white/5 p-2 rounded-full"><X className="w-5 h-5" /></button>
         </div>
         <div className="p-6">{children}</div>
       </div>
@@ -191,6 +191,7 @@ const LoginScreen = ({ onLogin }: any) => {
                 <form onSubmit={handleLogin} className="space-y-5">
                     <div>
                         <label className="block text-slate-400 text-xs font-bold mb-1.5 ml-1">EMAIL</label>
+                        {/* Mobile optimization: text-base prevents auto-zoom on iOS */}
                         <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full bg-slate-900/50 border border-slate-700/50 rounded-xl p-3.5 text-base md:text-sm text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all placeholder:text-slate-600" placeholder="name@example.com" required />
                     </div>
                     <div>
@@ -790,6 +791,7 @@ const AuthenticatedApp = ({ user, onLogout }: any) => {
     const [loading, setLoading] = useState(true);
     const [deleteConfirm, setDeleteConfirm] = useState<{open: boolean, table: string | null, id: string | null}>({ open: false, table: null, id: null });
     const [safeMode, setSafeMode] = useState(false); 
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false); // Mobile Menu State
 
     const fetchData = useCallback(async () => {
         if (!supabase) return;
@@ -855,28 +857,64 @@ const AuthenticatedApp = ({ user, onLogout }: any) => {
 
     if (loading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-blue-500"><Loader2 className="animate-spin" size={32} /></div>;
 
-    const NavItem = ({ id, label, icon: Icon }: any) => (
-        <button onClick={() => setActiveTab(id)} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all mb-1 ${activeTab === id ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'}`}><Icon size={20} /><span className="font-medium">{label}</span></button>
+    // Mobile Menu Helper
+    const NavContent = ({ mobile = false }) => (
+        <>
+            <button onClick={() => { setActiveTab('summary'); if(mobile) setIsMobileMenuOpen(false); }} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all mb-1 ${activeTab === 'summary' ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'}`}><ClipboardList size={20} /><span className="font-medium">Master Summary</span></button>
+            <button onClick={() => { setActiveTab('dashboard'); if(mobile) setIsMobileMenuOpen(false); }} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all mb-1 ${activeTab === 'dashboard' ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'}`}><LayoutDashboard size={20} /><span className="font-medium">Dashboard</span></button>
+            
+            <div className="pt-4 pb-2 text-[10px] font-bold text-slate-500 px-4 uppercase tracking-widest">Finances</div>
+            <button onClick={() => { setActiveTab('income'); if(mobile) setIsMobileMenuOpen(false); }} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all mb-1 ${activeTab === 'income' ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'}`}><Wallet size={20} /><span className="font-medium">Income</span></button>
+            <button onClick={() => { setActiveTab('expenses'); if(mobile) setIsMobileMenuOpen(false); }} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all mb-1 ${activeTab === 'expenses' ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'}`}><CreditCard size={20} /><span className="font-medium">Monthly Expenses</span></button>
+            <button onClick={() => { setActiveTab('emis'); if(mobile) setIsMobileMenuOpen(false); }} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all mb-1 ${activeTab === 'emis' ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'}`}><Landmark size={20} /><span className="font-medium">Loans & EMIs</span></button>
+            
+            <div className="pt-4 pb-2 text-[10px] font-bold text-slate-500 px-4 uppercase tracking-widest">Portfolio</div>
+            <button onClick={() => { setActiveTab('investments'); if(mobile) setIsMobileMenuOpen(false); }} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all mb-1 ${activeTab === 'investments' ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'}`}><TrendingUp size={20} /><span className="font-medium">Investments</span></button>
+            <button onClick={() => { setActiveTab('settlements'); if(mobile) setIsMobileMenuOpen(false); }} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all mb-1 ${activeTab === 'settlements' ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'}`}><Handshake size={20} /><span className="font-medium">Settlements</span></button>
+            <button onClick={() => { setActiveTab('goals'); if(mobile) setIsMobileMenuOpen(false); }} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all mb-1 ${activeTab === 'goals' ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'}`}><Target size={20} /><span className="font-medium">Wishlist & Goals</span></button>
+            
+            <div className="pt-4 border-t border-white/5 mt-4"></div>
+            <button onClick={() => { setActiveTab('reports'); if(mobile) setIsMobileMenuOpen(false); }} className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all mb-1 ${activeTab === 'reports' ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'}`}><FileText size={20} /><span className="font-medium">Reports & Export</span></button>
+        </>
     );
 
     return (
         <div className="min-h-screen bg-slate-950 text-slate-200 font-sans flex print:bg-white print:text-black">
+            {/* Desktop Sidebar */}
             <aside className="w-64 bg-slate-900 border-r border-slate-800 hidden md:flex flex-col print:hidden">
-                <div className="p-6 border-b border-slate-800 flex items-center space-x-2"><div className="bg-blue-600 p-2 rounded-lg"><LayoutDashboard size={20} className="text-white" /></div><div><h1 className="font-bold text-white text-lg tracking-tight">PFCC</h1><p className="text-xs text-slate-500">v3.9.0</p></div></div>
-                <nav className="flex-1 p-4 space-y-2">
-                    <NavItem id="summary" label="Master Summary" icon={ClipboardList} />
-                    <NavItem id="dashboard" label="Dashboard" icon={LayoutDashboard} />
-                    <NavItem id="income" label="Income" icon={Wallet} />
-                    <div className="pt-2 pb-1 text-xs font-semibold text-slate-500 px-4 uppercase tracking-wider">Outflow</div><NavItem id="expenses" label="Monthly Expenses" icon={CreditCard} /><NavItem id="emis" label="Loans & EMIs" icon={Landmark} />
-                    <div className="pt-2 pb-1 text-xs font-semibold text-slate-500 px-4 uppercase tracking-wider">Assets</div><NavItem id="settlements" label="Settlements" icon={Handshake} /><NavItem id="investments" label="Investments" icon={TrendingUp} /><NavItem id="goals" label="Wishlist & Goals" icon={Target} />
-                    <div className="pt-4 border-t border-slate-800 mt-4"></div><NavItem id="reports" label="Reports & Export" icon={FileText} />
+                <div className="p-6 border-b border-slate-800 flex items-center space-x-2"><div className="bg-blue-600 p-2 rounded-lg"><LayoutDashboard size={20} className="text-white" /></div><div><h1 className="font-bold text-white text-lg tracking-tight">PFCC</h1><p className="text-xs text-slate-500">v3.9.5</p></div></div>
+                <nav className="flex-1 p-4 space-y-1 overflow-y-auto custom-scrollbar">
+                    <NavContent />
                 </nav>
                 <div className="p-4 border-t border-slate-800"><button onClick={onLogout} className="w-full flex items-center space-x-3 px-4 py-3 text-rose-400 hover:bg-rose-900/20 rounded-lg transition-colors"><LogOut size={20} /><span>Sign Out</span></button></div>
             </aside>
-            <main className="flex-1 overflow-y-auto pb-20 md:pb-0 print:overflow-visible print:h-auto">
-                <header className="sticky top-0 z-30 bg-slate-950/80 backdrop-blur-md border-b border-slate-800 px-6 py-4 flex justify-between items-center print:hidden"><h2 className="text-xl font-bold text-white capitalize">{activeTab.replace('-', ' ')}</h2><div className="flex items-center space-x-4"><div className="hidden md:block text-right"><p className="text-sm font-medium text-white flex items-center justify-end"><UserCircle size={14} className="mr-1 text-blue-400"/>{user.email}</p><p className="text-xs text-slate-500">ID: {user.id.slice(0, 6)}...</p></div></div></header>
+
+            {/* Mobile Drawer Overlay */}
+            {isMobileMenuOpen && (
+                <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm md:hidden" onClick={() => setIsMobileMenuOpen(false)}>
+                    <div className="w-64 h-full bg-slate-900 border-r border-white/10 flex flex-col" onClick={e => e.stopPropagation()}>
+                         <div className="p-6 border-b border-slate-800 flex items-center justify-between">
+                            <div className="flex items-center space-x-2"><div className="bg-blue-600 p-2 rounded-lg"><LayoutDashboard size={20} className="text-white" /></div><span className="font-bold text-white">Menu</span></div>
+                            <button onClick={() => setIsMobileMenuOpen(false)} className="text-slate-400"><X size={24} /></button>
+                         </div>
+                         <nav className="flex-1 p-4 space-y-1 overflow-y-auto custom-scrollbar">
+                            <NavContent mobile={true} />
+                         </nav>
+                         <div className="p-4 border-t border-slate-800"><button onClick={onLogout} className="w-full flex items-center space-x-3 px-4 py-3 text-rose-400 hover:bg-rose-900/20 rounded-lg transition-colors"><LogOut size={20} /><span>Sign Out</span></button></div>
+                    </div>
+                </div>
+            )}
+
+            <main className="flex-1 overflow-y-auto pb-24 md:pb-0 print:overflow-visible print:h-auto -webkit-overflow-scrolling-touch">
+                <header className="sticky top-0 z-30 bg-slate-950/80 backdrop-blur-md border-b border-slate-800 px-4 md:px-6 py-4 flex justify-between items-center print:hidden">
+                    <div className="flex items-center gap-3">
+                        <button className="md:hidden text-slate-400 p-1" onClick={() => setIsMobileMenuOpen(true)}><Menu size={24} /></button>
+                        <h2 className="text-lg md:text-xl font-bold text-white capitalize">{activeTab.replace('-', ' ')}</h2>
+                    </div>
+                    <div className="flex items-center space-x-4"><div className="hidden md:block text-right"><p className="text-sm font-medium text-white flex items-center justify-end"><UserCircle size={14} className="mr-1 text-blue-400"/>{user.email}</p><p className="text-xs text-slate-500">ID: {user.id.slice(0, 6)}...</p></div></div>
+                </header>
                 <div className="hidden print:block p-8 pb-4 text-center border-b border-black"><h1 className="text-2xl font-bold text-black uppercase tracking-widest">Financial Status Report</h1><p className="text-sm text-gray-600">Personal Finance Command Center</p></div>
-                <div className="p-6 max-w-7xl mx-auto print:p-8 print:w-full">
+                <div className="p-4 md:p-6 max-w-7xl mx-auto print:p-8 print:w-full">
                     <div className="print:visible block"><div className="hidden print:block"><PrintableReport data={data} /></div></div>
                     <div className="print:hidden">
                         {activeTab === 'summary' && <MasterSummaryModule {...commonProps} />}
@@ -891,6 +929,15 @@ const AuthenticatedApp = ({ user, onLogout }: any) => {
                     </div>
                 </div>
             </main>
+
+            {/* Mobile Bottom Quick Nav */}
+            <div className="fixed bottom-0 left-0 right-0 bg-slate-900/90 backdrop-blur-lg border-t border-white/10 flex md:hidden z-40 print:hidden pb-[env(safe-area-inset-bottom)] justify-around items-center h-16">
+              <button onClick={() => setActiveTab('dashboard')} className={`p-2 rounded-full ${activeTab === 'dashboard' ? 'text-blue-400 bg-blue-500/10' : 'text-slate-400'}`}><LayoutDashboard size={24} /></button>
+              <button onClick={() => setActiveTab('expenses')} className={`p-2 rounded-full ${activeTab === 'expenses' ? 'text-blue-400 bg-blue-500/10' : 'text-slate-400'}`}><CreditCard size={24} /></button>
+              <button onClick={() => setActiveTab('investments')} className={`p-2 rounded-full ${activeTab === 'investments' ? 'text-blue-400 bg-blue-500/10' : 'text-slate-400'}`}><TrendingUp size={24} /></button>
+              <button onClick={() => setIsMobileMenuOpen(true)} className={`p-2 rounded-full text-slate-400`}><Menu size={24} /></button>
+            </div>
+
             <Modal isOpen={deleteConfirm.open} onClose={() => setDeleteConfirm({ ...deleteConfirm, open: false })} title="Confirm Deletion"><div className="space-y-4"><div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-lg flex items-start space-x-3"><AlertTriangle className="text-rose-500 shrink-0" size={20} /><div><p className="text-rose-400 font-medium text-sm">Permanent Action</p><p className="text-xs text-rose-300/70">This record will be permanently deleted from the database.</p></div></div><p className="text-slate-300 text-sm">Are you sure you want to proceed?</p><div className="flex space-x-3 pt-2"><button onClick={() => setDeleteConfirm({ ...deleteConfirm, open: false })} className="flex-1 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium text-sm">Cancel</button><button onClick={handleDelete} className="flex-1 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg font-medium flex justify-center items-center text-sm"><Trash2 size={16} className="mr-2" /> Delete</button></div></div></Modal>
         </div>
     );
