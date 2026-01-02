@@ -13,6 +13,7 @@
     "deploy": "gh-pages -d dist"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.89.0",
     "@types/recharts": "^1.8.29",
     "lucide-react": "^0.562.0",
     "react": "^19.2.0",
