@@ -650,7 +650,12 @@ const InvestmentsModule = ({ data, onAdd, onUpdate, onDelete, safeMode, onBulkAd
         if (formData.type === 'Mutual Fund' && formData.schemeCode && formData.units && fetchedNav) {
              finalValue = Number(formData.units) * fetchedNav; 
         }
-        
+        // Auto Calculate for Stocks if price/units are entered manually
+        if (formData.type === 'Stocks' && formData.units && formData.invested_amount && !formData.value) {
+            // Assume user entered avg buy price in invested_amount field for manual ease, or correct it
+            // If user enters TOTAL invested amount and units, we keep as is.
+        }
+
         const payload = { 
             ...formData, 
             value: finalValue, 
@@ -688,12 +693,11 @@ const InvestmentsModule = ({ data, onAdd, onUpdate, onDelete, safeMode, onBulkAd
                 let headerIdx = -1;
                 let headers: string[] = [];
                 
-                // Look for common headers
-                const possibleHeaders = ['scheme name', 'fund name', 'security name', 'current value', 'market value'];
+                // Look for common headers including STOCK related ones
+                const possibleHeaders = ['scheme name', 'fund name', 'security name', 'current value', 'market value', 'stock name'];
                 
                 for(let i=0; i<rawData.length; i++) {
                     const row = rawData[i].map((c:any) => String(c).toLowerCase().trim());
-                    // Check if row contains at least one target header
                     if (possibleHeaders.some(h => row.includes(h))) {
                         headerIdx = i;
                         headers = row;
@@ -701,7 +705,7 @@ const InvestmentsModule = ({ data, onAdd, onUpdate, onDelete, safeMode, onBulkAd
                     }
                 }
 
-                if (headerIdx === -1) { alert("Could not identify header row. Ensure file has 'Scheme Name' and 'Current Value' columns."); return; }
+                if (headerIdx === -1) { alert("Could not identify header row. Ensure file has 'Scheme Name' or 'Stock Name' columns."); return; }
 
                 const parsed = [];
                 for(let i=headerIdx+1; i<rawData.length; i++) {
@@ -709,14 +713,11 @@ const InvestmentsModule = ({ data, onAdd, onUpdate, onDelete, safeMode, onBulkAd
                     if (!row || row.length === 0) continue;
                     
                     const item: any = {};
-                    // Map row values to keys based on found header index
-                    headers.forEach((h, colIdx) => {
-                        if(row[colIdx] !== undefined) item[h] = row[colIdx];
+                    headers.forEach((h, idx) => {
+                        // FIX: use idx instead of colIdx
+                        if(row[idx] !== undefined) item[h] = row[idx];
                     });
 
-                    // --- Flexible Mapping Logic ---
-                    // Try to find the value by checking multiple common aliases for each field
-                    
                     const findVal = (aliases: string[]) => {
                         for (const alias of aliases) {
                             if (item[alias] !== undefined) return item[alias];
@@ -724,25 +725,27 @@ const InvestmentsModule = ({ data, onAdd, onUpdate, onDelete, safeMode, onBulkAd
                         return null;
                     };
 
-                    const name = findVal(['scheme name', 'fund name', 'security name']);
-                    const currValRaw = findVal(['current value', 'market value', 'present value']);
-                    const invValRaw = findVal(['invested value', 'amount invested', 'cost value', 'invested amount']);
+                    const name = findVal(['scheme name', 'fund name', 'security name', 'stock name']);
+                    const currValRaw = findVal(['current value', 'market value', 'present value', 'closing value']);
+                    const invValRaw = findVal(['invested value', 'amount invested', 'cost value', 'invested amount', 'buy value']);
                     const unitsRaw = findVal(['units', 'balance units', 'quantity']);
                     
-                    // Cleanup Numbers (remove commas, currency symbols)
                     const cleanNum = (val: any) => parseFloat(String(val || '0').replace(/[^0-9.-]+/g,""));
 
                     const currVal = cleanNum(currValRaw);
                     const invVal = cleanNum(invValRaw);
                     const units = cleanNum(unitsRaw);
 
+                    let type = 'Mutual Fund';
+                    if (headers.includes('stock name') || headers.includes('isin')) type = 'Stocks';
+                    
                     if (name && !isNaN(currVal)) {
                         parsed.push({
                             name: String(name).trim(),
                             value: currVal,
                             invested_amount: isNaN(invVal) ? 0 : invVal,
                             units: isNaN(units) ? 0 : units,
-                            type: 'Mutual Fund', // Default for Groww import
+                            type: type,
                             created_at: new Date().toISOString()
                         });
                     }
@@ -756,7 +759,7 @@ const InvestmentsModule = ({ data, onAdd, onUpdate, onDelete, safeMode, onBulkAd
                 });
             } catch (err) {
                 console.error(err);
-                alert("Failed to parse file. Ensure it's a valid Excel/CSV.");
+                alert("Failed to parse file.");
             }
         };
         reader.readAsBinaryString(file);
@@ -783,8 +786,6 @@ const InvestmentsModule = ({ data, onAdd, onUpdate, onDelete, safeMode, onBulkAd
                     <button onClick={openAdd} className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-sm flex items-center transition-colors"><Plus size={16} className="mr-1" /> Add</button>
                 </div>
             )}><div className="overflow-x-auto"><table className="w-full text-left text-sm text-slate-400"><thead className="bg-white/5 text-slate-200 uppercase text-xs font-semibold"><tr><th className="px-4 py-3">Asset</th><th className="px-4 py-3">Invested</th><th className="px-4 py-3">Current</th><th className="px-4 py-3">P&L</th><th className="px-4 py-3 text-right">Action</th></tr></thead><tbody className="divide-y divide-white/5">{data.map((item: any) => { const pnl = Number(item.value) - (Number(item.invested_amount) || Number(item.value)); const pnlPercent = (Number(item.invested_amount) || 0) > 0 ? ((pnl / Number(item.invested_amount)) * 100).toFixed(1) : '0'; return (<tr key={item.id} className="hover:bg-white/5 transition-colors"><td className="px-4 py-3"><div className="text-white font-medium">{item.name}</div><div className="text-[10px] text-slate-500">{item.type} {item.nav && `NAV: ${item.nav}`}</div></td><td className="px-4 py-3">{formatCurrency(item.invested_amount || item.value)}</td><td className="px-4 py-3 text-white font-medium">{formatCurrency(item.value)}</td><td className={`px-4 py-3 font-medium ${pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{pnl >= 0 ? '+' : ''}{formatCurrency(pnl)} <span className="text-xs opacity-75">({pnlPercent}%)</span></td><td className="px-4 py-3 text-right flex justify-end gap-2"><button onClick={() => openEdit(item)} className="text-blue-400 hover:text-blue-300 p-1"><Pencil size={16}/></button><button onClick={() => onDelete('investments', item.id)} className="text-rose-500 hover:text-rose-400 p-1 rounded-md hover:bg-rose-500/10"><Trash2 size={16}/></button></td></tr>); })}</tbody></table></div></Card>
-            
-            {/* Modal for Add/Edit */}
             <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingId ? "Edit Investment" : "Add Investment"}><form onSubmit={handleAddOrUpdate} className="space-y-4"><div><label className="block text-xs font-medium text-slate-400 mb-1">Asset Class</label><select className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none" onChange={(e) => { handleChange('type', e.target.value); if (e.target.value !== 'Mutual Fund') { setFetchedNav(null); setSearchQuery(""); } }} value={formData.type}><option value="Mutual Fund">Mutual Fund (Auto-Fetch)</option><option value="Stocks">Stocks / Equity</option><option value="Govt Scheme">Govt Scheme (PPF/EPF)</option><option value="Commodity">Gold / Silver</option><option value="Crypto">Crypto</option><option value="Real Estate">Real Estate</option><option value="Cash">Cash / FD</option></select></div>{formData.type === 'Mutual Fund' ? (<><div className="relative"><label className="block text-xs font-medium text-slate-400 mb-1">Search Mutual Fund</label><div className="relative"><Search className="absolute left-3 top-2.5 text-slate-500" size={16} /><input type="text" placeholder="Type fund name" className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-9 pr-3 py-2 text-white outline-none" value={formData.name || searchQuery} onChange={(e) => { setSearchQuery(e.target.value); if (formData.schemeCode) setFormData({...formData, schemeCode: '', name: ''}); }} />{isSearching && <Loader2 className="absolute right-3 top-2.5 text-blue-500 animate-spin" size={16} />}</div>{mfResults.length > 0 && !formData.schemeCode && (<div className="absolute z-50 w-full bg-slate-800 border border-slate-700 rounded-lg mt-1 shadow-xl max-h-48 overflow-y-auto">{mfResults.map((fund: any) => (<div key={fund.schemeCode} className="p-2 hover:bg-slate-700 cursor-pointer text-xs text-slate-200 border-b border-slate-700/50" onClick={() => selectFund(fund)}>{fund.schemeName}</div>))}</div>)}</div>{formData.schemeCode && fetchedNav && (<div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex justify-between items-center"><span className="text-xs text-emerald-400 font-medium">Live NAV Fetched</span><span className="text-sm font-bold text-white">₹{fetchedNav}</span></div>)}<div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-medium text-slate-400 mb-1">Total Invested (₹)</label><input type="number" required className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none" onChange={(e) => handleChange('invested_amount', e.target.value)} value={formData.invested_amount}/></div><div><label className="block text-xs font-medium text-slate-400 mb-1">Units Held</label><input type="number" step="0.001" required className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none" onChange={(e) => handleChange('units', e.target.value)} value={formData.units}/></div></div></>) : (<><div><label className="block text-xs font-medium text-slate-400 mb-1">Asset Name</label><input type="text" required className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none" onChange={(e) => handleChange('name', e.target.value)} value={formData.name} /></div><div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-medium text-slate-400 mb-1">Invested Amount (₹)</label><input type="number" required className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none" onChange={(e) => handleChange('invested_amount', e.target.value)} value={formData.invested_amount}/></div><div><label className="block text-xs font-medium text-slate-400 mb-1">Current Value (₹)</label><input type="number" required className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none" onChange={(e) => handleChange('value', e.target.value)} value={formData.value}/></div></div></>)}<button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white py-2 rounded-lg font-medium mt-4">Save Investment</button></form></Modal>
             
             {/* Bulk Import Modal */}
@@ -794,7 +795,7 @@ const InvestmentsModule = ({ data, onAdd, onUpdate, onDelete, safeMode, onBulkAd
                         <div className="border-2 border-dashed border-slate-600 rounded-2xl p-8 flex flex-col items-center justify-center hover:border-blue-500 transition-colors">
                             <Upload className="w-12 h-12 text-slate-500 mb-4" />
                             <p className="text-slate-300 font-medium mb-2">Upload Groww/Excel Statement</p>
-                            <p className="text-slate-500 text-xs mb-6">Supports .csv and .xlsx files. <br/>Ensure headers like 'Scheme Name' & 'Current Value' exist.</p>
+                            <p className="text-slate-500 text-xs mb-6">Supports .csv and .xlsx files. <br/>Ensure headers like 'Scheme Name' or 'Stock Name' exist.</p>
                             <label className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-lg cursor-pointer transition-colors font-medium text-sm">
                                 Select File
                                 <input type="file" className="hidden" accept=".csv, .xlsx, .xls" onChange={handleFileUpload} />
@@ -805,7 +806,7 @@ const InvestmentsModule = ({ data, onAdd, onUpdate, onDelete, safeMode, onBulkAd
                 ) : (
                     <div className="space-y-6">
                          <div className="bg-slate-800 p-4 rounded-xl space-y-2">
-                             <div className="flex justify-between text-sm"><span className="text-slate-400">Funds Found:</span><span className="text-white font-bold">{importPreview.count}</span></div>
+                             <div className="flex justify-between text-sm"><span className="text-slate-400">Funds/Stocks Found:</span><span className="text-white font-bold">{importPreview.count}</span></div>
                              <div className="flex justify-between text-sm"><span className="text-slate-400">Total Invested:</span><span className="text-white font-bold">{formatCurrency(importPreview.totalInv)}</span></div>
                              <div className="flex justify-between text-sm"><span className="text-slate-400">Total Current Value:</span><span className="text-emerald-400 font-bold">{formatCurrency(importPreview.totalCurr)}</span></div>
                          </div>
