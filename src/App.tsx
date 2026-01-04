@@ -5,7 +5,7 @@
  * * ---------------------------------------------------------------------------
  */
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { 
   LayoutDashboard, Wallet, CreditCard, Handshake, TrendingUp, Target, 
   Plus, Trash2, Lock, ChevronRight, ChevronLeft, ArrowUpRight, ArrowDownRight, 
@@ -13,7 +13,7 @@ import {
   Search, Loader2, AlertCircle, Landmark, CalendarClock, Banknote, FileText, 
   Download, Printer, FileSpreadsheet, Database, Lightbulb, Zap, LogOut, Settings,
   Shield, ShieldAlert, Calendar, Repeat, BellRing, Droplets, Sparkles, TrendingDown,
-  ThumbsUp, AlertOctagon, Pencil, Menu, X
+  ThumbsUp, AlertOctagon, Pencil, Menu, X, Upload, FileUp, Trash
 } from 'lucide-react';
 import { 
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, 
@@ -97,6 +97,20 @@ const downloadMasterBackup = (data: any) => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+};
+
+// --- SheetJS (XLSX) Loader ---
+// We inject the script tag dynamically so we don't need a build step for this heavy library
+const useXLSX = () => {
+    const [ready, setReady] = useState(false);
+    useEffect(() => {
+        if ((window as any).XLSX) { setReady(true); return; }
+        const script = document.createElement('script');
+        script.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+        script.onload = () => setReady(true);
+        document.body.appendChild(script);
+    }, []);
+    return ready;
 };
 
 // --- Components ---
@@ -191,7 +205,6 @@ const LoginScreen = ({ onLogin }: any) => {
                 <form onSubmit={handleLogin} className="space-y-5">
                     <div>
                         <label className="block text-slate-400 text-xs font-bold mb-1.5 ml-1">EMAIL</label>
-                        {/* Mobile optimization: text-base prevents auto-zoom on iOS */}
                         <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full bg-slate-900/50 border border-slate-700/50 rounded-xl p-3.5 text-base md:text-sm text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all placeholder:text-slate-600" placeholder="name@example.com" required />
                     </div>
                     <div>
@@ -550,10 +563,9 @@ const ReportsModule = ({ data }: any) => {
     );
 };
 
-const ExpensesModule = ({ data, onAdd, onUpdate, onDelete, safeMode }: any) => {
+const ExpensesModule = ({ data, onAdd, onDelete, safeMode }: any) => {
     const [viewDate, setViewDate] = useState(new Date());
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [editingId, setEditingId] = useState<string | null>(null);
     const [formData, setFormData] = useState<any>({ name: '', amount: '', category: 'General', is_recurring: true, date: '' });
     const filteredExpenses = useMemo(() => {
         return data.filter((item: any) => {
@@ -563,78 +575,60 @@ const ExpensesModule = ({ data, onAdd, onUpdate, onDelete, safeMode }: any) => {
         });
     }, [data, viewDate]);
     const totalMonthly = filteredExpenses.reduce((acc: number, item: any) => acc + Number(item.amount), 0);
-    
-    const openAdd = () => { setEditingId(null); setFormData({ name: '', amount: '', category: 'General', is_recurring: true, date: '' }); setIsModalOpen(true); };
-    const openEdit = (item: any) => { setEditingId(item.id); setFormData({ name: item.name, amount: item.amount, category: item.category, is_recurring: item.is_recurring, date: item.date || '' }); setIsModalOpen(true); };
-
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleAdd = async (e: React.FormEvent) => {
         e.preventDefault();
-        const payload = { ...formData, amount: Number(formData.amount), tenure_months: null, is_recurring: formData.is_recurring === 'true' || formData.is_recurring === true, date: formData.date || new Date().toISOString() };
-        if (editingId) {
-             const success = await onUpdate('expenses', editingId, payload);
-             if (success) setIsModalOpen(false);
-        } else {
-             const success = await onAdd('expenses', { ...payload, created_at: new Date().toISOString() }); // created_at handled by DB mostly but safer
-             if (success) setIsModalOpen(false);
-        }
+        try {
+            await onAdd('expenses', { ...formData, amount: Number(formData.amount), tenure_months: null, is_recurring: formData.is_recurring === 'true' || formData.is_recurring === true, date: formData.date || new Date().toISOString() });
+            setIsModalOpen(false); setFormData({ name: '', amount: '', category: 'General', is_recurring: true, date: '' });
+        } catch (err) { console.error(err); }
     };
     const handleChange = (field: string, value: any) => { setFormData((prev: any) => ({ ...prev, [field]: value })); };
     const changeMonth = (offset: number) => { const newDate = new Date(viewDate); newDate.setMonth(newDate.getMonth() + offset); setViewDate(newDate); };
-    
     return (
         <div className="space-y-6">
              <div className="flex items-center justify-between bg-white/5 border border-white/10 p-4 rounded-xl"><button onClick={() => changeMonth(-1)} className="p-2 hover:bg-white/10 rounded-full text-slate-400 hover:text-white"><ChevronLeft size={24} /></button><div className="text-center"><h2 className="text-lg font-bold text-white">{viewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</h2><p className="text-xs text-slate-500">Expense Log</p></div><button onClick={() => changeMonth(1)} className="p-2 hover:bg-white/10 rounded-full text-slate-400 hover:text-white"><ChevronRight size={24} /></button></div>
              <div className="grid grid-cols-1 gap-4"><StatCard title={`Total for ${viewDate.toLocaleString('default', { month: 'short' })}`} value={formatCurrency(totalMonthly)} icon={Wallet} color="blue" subtext="Recurring + One-time" /></div>
-            <Card title={`Expenses (${viewDate.toLocaleString('default', { month: 'short' })})`} action={!safeMode && (<button onClick={openAdd} className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-sm flex items-center transition-colors"><Plus size={16} className="mr-1" /> Add Expense</button>)}>
-                <div className="overflow-x-auto"><table className="w-full text-left text-sm text-slate-400"><thead className="bg-white/5 text-slate-200 uppercase text-xs font-semibold"><tr><th className="px-4 py-3">Expense Name</th><th className="px-4 py-3">Cost</th><th className="px-4 py-3">Type</th>{!safeMode && <th className="px-4 py-3 text-right">Actions</th>}</tr></thead><tbody className="divide-y divide-white/5">{filteredExpenses.length === 0 ? (<tr><td colSpan={4} className="px-4 py-8 text-center text-slate-600 italic">No expenses for this month.</td></tr>) : (filteredExpenses.map((item: any) => (<tr key={item.id} className="hover:bg-white/5 transition-colors"><td className="px-4 py-3 text-white font-medium">{item.name}<div className="text-[10px] text-slate-500">{item.category}</div></td><td className="px-4 py-3">{formatCurrency(item.amount)}</td><td className="px-4 py-3">{item.is_recurring !== false ? <span className="flex items-center text-emerald-400 text-xs"><Repeat size={12} className="mr-1"/> Recurring</span> : <span className="flex items-center text-blue-400 text-xs"><Calendar size={12} className="mr-1"/> One-time</span>}</td>{!safeMode && (<td className="px-4 py-3 text-right flex justify-end gap-2"><button onClick={() => openEdit(item)} className="text-blue-400 hover:text-blue-300 p-1"><Pencil size={16}/></button><button onClick={() => onDelete('expenses', item.id)} className="text-rose-500 hover:text-rose-400 p-1"><Trash2 size={16} /></button></td>)}</tr>)))}</tbody></table></div>
+            <Card title={`Expenses (${viewDate.toLocaleString('default', { month: 'short' })})`} action={!safeMode && (<button onClick={() => setIsModalOpen(true)} className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-sm flex items-center transition-colors"><Plus size={16} className="mr-1" /> Add Expense</button>)}>
+                <div className="overflow-x-auto"><table className="w-full text-left text-sm text-slate-400"><thead className="bg-white/5 text-slate-200 uppercase text-xs font-semibold"><tr><th className="px-4 py-3">Expense Name</th><th className="px-4 py-3">Cost</th><th className="px-4 py-3">Type</th>{!safeMode && <th className="px-4 py-3 text-right">Actions</th>}</tr></thead><tbody className="divide-y divide-white/5">{filteredExpenses.length === 0 ? (<tr><td colSpan={4} className="px-4 py-8 text-center text-slate-600 italic">No expenses for this month.</td></tr>) : (filteredExpenses.map((item: any) => (<tr key={item.id} className="hover:bg-white/5 transition-colors"><td className="px-4 py-3 text-white font-medium">{item.name}<div className="text-[10px] text-slate-500">{item.category}</div></td><td className="px-4 py-3">{formatCurrency(item.amount)}</td><td className="px-4 py-3">{item.is_recurring !== false ? <span className="flex items-center text-emerald-400 text-xs"><Repeat size={12} className="mr-1"/> Recurring</span> : <span className="flex items-center text-blue-400 text-xs"><Calendar size={12} className="mr-1"/> One-time</span>}</td>{!safeMode && (<td className="px-4 py-3 text-right"><button onClick={() => onDelete('expenses', item.id)} className="text-rose-500 hover:text-rose-400 p-1 rounded-md hover:bg-rose-500/10 transition-colors"><Trash2 size={16} /></button></td>)}</tr>)))}</tbody></table></div>
             </Card>
-            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingId ? "Edit Expense" : "Add Expense"}><form onSubmit={handleSubmit} className="space-y-4"><div><label className="block text-xs font-medium text-slate-400 mb-1">Expense Name</label><input type="text" required className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none" value={formData.name} onChange={(e) => handleChange('name', e.target.value)} /></div><div><label className="block text-xs font-medium text-slate-400 mb-1">Cost (₹)</label><input type="number" required className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none" value={formData.amount} onChange={(e) => handleChange('amount', e.target.value)} /></div><div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-medium text-slate-400 mb-1">Type</label><select className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none" value={formData.is_recurring} onChange={(e) => handleChange('is_recurring', e.target.value === 'true')}><option value="true">Recurring (Monthly)</option><option value="false">One-time (Specific Date)</option></select></div><div><label className="block text-xs font-medium text-slate-400 mb-1">Date (if One-time)</label><input type="date" disabled={formData.is_recurring === true || formData.is_recurring === 'true'} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50" value={formData.date ? formData.date.split('T')[0] : ''} onChange={(e) => handleChange('date', e.target.value)} /></div></div><div><label className="block text-xs font-medium text-slate-400 mb-1">Category</label><input type="text" placeholder="General" className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none" value={formData.category} onChange={(e) => handleChange('category', e.target.value)} /></div><button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white py-2 rounded-lg font-medium mt-4">Save Expense</button></form></Modal>
+            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Add Expense"><form onSubmit={handleAdd} className="space-y-4"><div><label className="block text-xs font-medium text-slate-400 mb-1">Expense Name</label><input type="text" required className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none" onChange={(e) => handleChange('name', e.target.value)} /></div><div><label className="block text-xs font-medium text-slate-400 mb-1">Cost (₹)</label><input type="number" required className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none" onChange={(e) => handleChange('amount', e.target.value)} /></div><div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-medium text-slate-400 mb-1">Type</label><select className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none" value={formData.is_recurring} onChange={(e) => handleChange('is_recurring', e.target.value === 'true')}><option value="true">Recurring (Monthly)</option><option value="false">One-time (Specific Date)</option></select></div><div><label className="block text-xs font-medium text-slate-400 mb-1">Date (if One-time)</label><input type="date" disabled={formData.is_recurring === true || formData.is_recurring === 'true'} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50" onChange={(e) => handleChange('date', e.target.value)} /></div></div><div><label className="block text-xs font-medium text-slate-400 mb-1">Category</label><input type="text" placeholder="General" className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none" value={formData.category} onChange={(e) => handleChange('category', e.target.value)} /></div><button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white py-2 rounded-lg font-medium mt-4">Save Expense</button></form></Modal>
         </div>
     );
 };
 
-const LoansModule = ({ data, onAdd, onUpdate, onDelete, safeMode }: any) => {
+const LoansModule = ({ data, onAdd, onDelete, safeMode }: any) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [editingId, setEditingId] = useState<string | null>(null);
     const [formData, setFormData] = useState<any>({ name: '', amount: '', category: 'Loan', tenure_months: '' });
-
-    const openAdd = () => { setEditingId(null); setFormData({ name: '', amount: '', category: 'Loan', tenure_months: '' }); setIsModalOpen(true); };
-    const openEdit = (item: any) => { setEditingId(item.id); setFormData({ name: item.name, amount: item.amount, category: item.category, tenure_months: item.tenure_months }); setIsModalOpen(true); };
-
-    const handleSubmit = async (e: React.FormEvent) => { 
-        e.preventDefault(); 
-        const payload = { ...formData, amount: Number(formData.amount), tenure_months: Number(formData.tenure_months) };
-        if (editingId) {
-             const success = await onUpdate('expenses', editingId, payload);
-             if (success) setIsModalOpen(false);
-        } else {
-             const success = await onAdd('expenses', payload);
-             if (success) setIsModalOpen(false);
-        }
-    };
+    const handleAdd = async (e: React.FormEvent) => { e.preventDefault(); const success = await onAdd('expenses', { ...formData, amount: Number(formData.amount), tenure_months: Number(formData.tenure_months) }); if (success) { setIsModalOpen(false); setFormData({ name: '', amount: '', category: 'Loan', tenure_months: '' }); } };
     const handleChange = (field: string, value: any) => { setFormData((prev: any) => ({ ...prev, [field]: value })); };
     const totalMonthlyEMI = data.reduce((acc: number, item: any) => acc + Number(item.amount), 0);
     const totalOutstanding = data.reduce((acc: number, item: any) => acc + (Number(item.amount) * Number(item.tenure_months)), 0);
     return (
         <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4"><StatCard title="Total Monthly EMI" value={formatCurrency(totalMonthlyEMI)} icon={CalendarClock} color="rose" /><StatCard title="Total Outstanding Debt" value={formatCurrency(totalOutstanding)} icon={Banknote} color="amber" /></div>
-            <Card title="Active Loans & EMIs" action={!safeMode && (<button onClick={openAdd} className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-sm flex items-center transition-colors"><Plus size={16} className="mr-1" /> Add Loan</button>)}>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{data.map((loan: any) => { const endDate = new Date(); endDate.setMonth(endDate.getMonth() + loan.tenure_months); return (<div key={loan.id} className="bg-white/5 border border-white/10 p-5 rounded-xl relative group">{!safeMode && (<div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => openEdit(loan)} className="text-blue-400 hover:text-blue-300 p-1"><Pencil size={16}/></button><button onClick={() => onDelete('expenses', loan.id)} className="text-slate-600 hover:text-rose-500 p-1"><Trash2 size={16}/></button></div>)}<div><h3 className="text-white font-bold">{loan.name}</h3><div className="text-rose-400 font-bold text-xl">{formatCurrency(loan.amount)}</div><div className="text-slate-500 text-xs">Tenure: {loan.tenure_months} months</div></div><div className="mt-4 space-y-3"><div className="flex justify-between text-sm"><span className="text-slate-400">Total Pending</span><span className="text-amber-400 font-medium">{formatCurrency(loan.amount * loan.tenure_months)}</span></div><div className="pt-3 border-t border-white/5 mt-2"><div className="flex items-center text-emerald-400 text-xs font-bold"><CheckCircle2 size={12} className="mr-1"/> Debt Free: {endDate.toLocaleString('default', { month: 'short', year: 'numeric' })}</div></div></div></div>); })}</div>
+            <Card title="Active Loans & EMIs" action={!safeMode && (<button onClick={() => setIsModalOpen(true)} className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-sm flex items-center transition-colors"><Plus size={16} className="mr-1" /> Add Loan</button>)}>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{data.map((loan: any) => { const endDate = new Date(); endDate.setMonth(endDate.getMonth() + loan.tenure_months); return (<div key={loan.id} className="bg-white/5 border border-white/10 p-5 rounded-xl relative group">{!safeMode && (<button onClick={() => onDelete('expenses', loan.id)} className="absolute top-4 right-4 text-slate-600 hover:text-rose-500 opacity-0 group-hover:opacity-100 p-1"><Trash2 size={16}/></button>)}<div><h3 className="text-white font-bold">{loan.name}</h3><div className="text-rose-400 font-bold text-xl">{formatCurrency(loan.amount)}</div><div className="text-slate-500 text-xs">Tenure: {loan.tenure_months} months</div></div><div className="mt-4 space-y-3"><div className="flex justify-between text-sm"><span className="text-slate-400">Total Pending</span><span className="text-amber-400 font-medium">{formatCurrency(loan.amount * loan.tenure_months)}</span></div><div className="pt-3 border-t border-white/5 mt-2"><div className="flex items-center text-emerald-400 text-xs font-bold"><CheckCircle2 size={12} className="mr-1"/> Debt Free: {endDate.toLocaleString('default', { month: 'short', year: 'numeric' })}</div></div></div></div>); })}</div>
             </Card>
-            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingId ? "Edit Loan" : "Add Loan"}><form onSubmit={handleSubmit} className="space-y-4"><div><label className="block text-xs font-medium text-slate-400 mb-1">Name</label><input type="text" required className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none" value={formData.name} onChange={(e) => handleChange('name', e.target.value)} /></div><div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-medium text-slate-400 mb-1">EMI</label><input type="number" required className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none" value={formData.amount} onChange={(e) => handleChange('amount', e.target.value)} /></div><div><label className="block text-xs font-medium text-slate-400 mb-1">Tenure</label><input type="number" required className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none" value={formData.tenure_months} onChange={(e) => handleChange('tenure_months', e.target.value)} /></div></div><button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white py-2 rounded-lg font-medium mt-4">Save</button></form></Modal>
+            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Add Loan"><form onSubmit={handleAdd} className="space-y-4"><div><label className="block text-xs font-medium text-slate-400 mb-1">Name</label><input type="text" required className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none" onChange={(e) => handleChange('name', e.target.value)} /></div><div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-medium text-slate-400 mb-1">EMI</label><input type="number" required className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none" onChange={(e) => handleChange('amount', e.target.value)} /></div><div><label className="block text-xs font-medium text-slate-400 mb-1">Tenure</label><input type="number" required className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none" onChange={(e) => handleChange('tenure_months', e.target.value)} /></div></div><button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white py-2 rounded-lg font-medium mt-4">Save</button></form></Modal>
         </div>
     );
 };
 
-const InvestmentsModule = ({ data, onAdd, onUpdate, onDelete, safeMode }: any) => {
+const InvestmentsModule = ({ data, onAdd, onUpdate, onDelete, safeMode, onBulkAdd, onDeleteAll }: any) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [editingId, setEditingId] = useState<string | null>(null);
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [formData, setFormData] = useState<any>({ name: '', value: '', invested_amount: '', type: 'Mutual Fund', schemeCode: '', units: '' });
     const [searchQuery, setSearchQuery] = useState('');
     const [mfResults, setMfResults] = useState<any[]>([]);
     const [isSearching, setIsSearching] = useState(false);
     const [fetchedNav, setFetchedNav] = useState<number | null>(null);
-    
+    const [editingId, setEditingId] = useState<string | null>(null);
+
+    // Import State
+    const xlsxReady = useXLSX();
+    const [importData, setImportData] = useState<any[]>([]);
+    const [importPreview, setImportPreview] = useState<{count: number, totalInv: number, totalCurr: number} | null>(null);
+
     const totalValue = data.reduce((acc: any, c: any) => acc + Number(c.value), 0);
     const totalInvested = data.reduce((acc: any, c: any) => acc + (Number(c.invested_amount) || Number(c.value)), 0);
     const totalPnL = totalValue - totalInvested;
@@ -651,9 +645,19 @@ const InvestmentsModule = ({ data, onAdd, onUpdate, onDelete, safeMode }: any) =
         e.preventDefault(); 
         let finalValue = Number(formData.value); 
         let finalNav = fetchedNav; 
-        if (formData.type === 'Mutual Fund' && formData.schemeCode && formData.units && fetchedNav) finalValue = Number(formData.units) * fetchedNav; 
         
-        const payload = { ...formData, value: finalValue, invested_amount: Number(formData.invested_amount), units: formData.units ? Number(formData.units) : null, nav: finalNav };
+        // Auto Calculate logic if NAV present
+        if (formData.type === 'Mutual Fund' && formData.schemeCode && formData.units && fetchedNav) {
+             finalValue = Number(formData.units) * fetchedNav; 
+        }
+        
+        const payload = { 
+            ...formData, 
+            value: finalValue, 
+            invested_amount: Number(formData.invested_amount), 
+            units: formData.units ? Number(formData.units) : null, 
+            nav: finalNav 
+        };
         
         if (editingId) {
              const success = await onUpdate('investments', editingId, payload);
@@ -665,11 +669,150 @@ const InvestmentsModule = ({ data, onAdd, onUpdate, onDelete, safeMode }: any) =
     };
     
     const handleChange = (field: string, value: any) => { setFormData((prev: any) => ({ ...prev, [field]: value })); };
+
+    // --- Bulk Import Logic (Enhanced Parser) ---
+    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !(window as any).XLSX) return;
+
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+            try {
+                const bstr = evt.target?.result;
+                const wb = (window as any).XLSX.read(bstr, { type: 'binary' });
+                const wsname = wb.SheetNames[0];
+                const ws = wb.Sheets[wsname];
+                const rawData = (window as any).XLSX.utils.sheet_to_json(ws, { header: 1 }); // Array of arrays
+
+                // --- SMART HEADER SEEKER ---
+                let headerIdx = -1;
+                let headers: string[] = [];
+                
+                // Look for common headers
+                const possibleHeaders = ['scheme name', 'fund name', 'security name', 'current value', 'market value'];
+                
+                for(let i=0; i<rawData.length; i++) {
+                    const row = rawData[i].map((c:any) => String(c).toLowerCase().trim());
+                    // Check if row contains at least one target header
+                    if (possibleHeaders.some(h => row.includes(h))) {
+                        headerIdx = i;
+                        headers = row;
+                        break;
+                    }
+                }
+
+                if (headerIdx === -1) { alert("Could not identify header row. Ensure file has 'Scheme Name' and 'Current Value' columns."); return; }
+
+                const parsed = [];
+                for(let i=headerIdx+1; i<rawData.length; i++) {
+                    const row = rawData[i];
+                    if (!row || row.length === 0) continue;
+                    
+                    const item: any = {};
+                    // Map row values to keys based on found header index
+                    headers.forEach((h, colIdx) => {
+                        if(row[colIdx] !== undefined) item[h] = row[colIdx];
+                    });
+
+                    // --- Flexible Mapping Logic ---
+                    // Try to find the value by checking multiple common aliases for each field
+                    
+                    const findVal = (aliases: string[]) => {
+                        for (const alias of aliases) {
+                            if (item[alias] !== undefined) return item[alias];
+                        }
+                        return null;
+                    };
+
+                    const name = findVal(['scheme name', 'fund name', 'security name']);
+                    const currValRaw = findVal(['current value', 'market value', 'present value']);
+                    const invValRaw = findVal(['invested value', 'amount invested', 'cost value', 'invested amount']);
+                    const unitsRaw = findVal(['units', 'balance units', 'quantity']);
+                    
+                    // Cleanup Numbers (remove commas, currency symbols)
+                    const cleanNum = (val: any) => parseFloat(String(val || '0').replace(/[^0-9.-]+/g,""));
+
+                    const currVal = cleanNum(currValRaw);
+                    const invVal = cleanNum(invValRaw);
+                    const units = cleanNum(unitsRaw);
+
+                    if (name && !isNaN(currVal)) {
+                        parsed.push({
+                            name: String(name).trim(),
+                            value: currVal,
+                            invested_amount: isNaN(invVal) ? 0 : invVal,
+                            units: isNaN(units) ? 0 : units,
+                            type: 'Mutual Fund', // Default for Groww import
+                            created_at: new Date().toISOString()
+                        });
+                    }
+                }
+
+                setImportData(parsed);
+                setImportPreview({
+                    count: parsed.length,
+                    totalInv: parsed.reduce((a, b) => a + b.invested_amount, 0),
+                    totalCurr: parsed.reduce((a, b) => a + b.value, 0)
+                });
+            } catch (err) {
+                console.error(err);
+                alert("Failed to parse file. Ensure it's a valid Excel/CSV.");
+            }
+        };
+        reader.readAsBinaryString(file);
+    };
+
+    const confirmImport = async () => {
+        if (!onBulkAdd || importData.length === 0) return;
+        const success = await onBulkAdd('investments', importData);
+        if (success) {
+            setImportData([]);
+            setImportPreview(null);
+            setIsImportModalOpen(false);
+            alert("Portfolio Imported Successfully!");
+        }
+    };
+
     return (
         <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"><StatCard title="Current Value" value={formatCurrency(totalValue)} icon={TrendingUp} color="blue" /><StatCard title="Total Invested" value={formatCurrency(totalInvested)} icon={Coins} color="amber" /><StatCard title="Total P&L" value={formatCurrency(totalPnL)} icon={totalPnL >= 0 ? ArrowUpRight : ArrowDownRight} color={totalPnL >= 0 ? "emerald" : "rose"} /><StatCard title="Overall ROI" value={`${roi}%`} icon={Percent} color={Number(roi) >= 0 ? "emerald" : "rose"} /></div>
-            <Card title="Holdings" action={!safeMode && (<button onClick={openAdd} className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-sm flex items-center transition-colors"><Plus size={16} className="mr-1" /> Add</button>)}><div className="overflow-x-auto"><table className="w-full text-left text-sm text-slate-400"><thead className="bg-white/5 text-slate-200 uppercase text-xs font-semibold"><tr><th className="px-4 py-3">Asset</th><th className="px-4 py-3">Invested</th><th className="px-4 py-3">Current</th><th className="px-4 py-3">P&L</th><th className="px-4 py-3 text-right">Action</th></tr></thead><tbody className="divide-y divide-white/5">{data.map((item: any) => { const pnl = Number(item.value) - (Number(item.invested_amount) || Number(item.value)); const pnlPercent = (Number(item.invested_amount) || 0) > 0 ? ((pnl / Number(item.invested_amount)) * 100).toFixed(1) : '0'; return (<tr key={item.id} className="hover:bg-white/5 transition-colors"><td className="px-4 py-3"><div className="text-white font-medium">{item.name}</div><div className="text-[10px] text-slate-500">{item.type} {item.nav && `NAV: ${item.nav}`}</div></td><td className="px-4 py-3">{formatCurrency(item.invested_amount || item.value)}</td><td className="px-4 py-3 text-white font-medium">{formatCurrency(item.value)}</td><td className={`px-4 py-3 font-medium ${pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{pnl >= 0 ? '+' : ''}{formatCurrency(pnl)} <span className="text-xs opacity-75">({pnlPercent}%)</span></td><td className="px-4 py-3 text-right flex justify-end gap-2"><button onClick={() => openEdit(item)} className="text-blue-400 hover:text-blue-300 p-1"><Pencil size={16}/></button><button onClick={() => onDelete('investments', item.id)} className="text-rose-500 hover:text-rose-400 p-1 rounded-md hover:bg-rose-500/10"><Trash2 size={16}/></button></td></tr>); })}</tbody></table></div></Card>
+            <Card title="Holdings" action={!safeMode && (
+                <div className="flex gap-2">
+                     <button onClick={() => { if(confirm("Are you sure you want to delete ALL investments? This cannot be undone.")) onDeleteAll('investments'); }} className="bg-rose-900/50 hover:bg-rose-600 text-rose-200 hover:text-white px-3 py-1.5 rounded-lg text-sm flex items-center transition-colors border border-rose-800"><Trash2 size={16} className="mr-1" /> Clear All</button>
+                    <button onClick={() => setIsImportModalOpen(true)} className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-sm flex items-center transition-colors"><FileUp size={16} className="mr-1" /> Import</button>
+                    <button onClick={openAdd} className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-lg text-sm flex items-center transition-colors"><Plus size={16} className="mr-1" /> Add</button>
+                </div>
+            )}><div className="overflow-x-auto"><table className="w-full text-left text-sm text-slate-400"><thead className="bg-white/5 text-slate-200 uppercase text-xs font-semibold"><tr><th className="px-4 py-3">Asset</th><th className="px-4 py-3">Invested</th><th className="px-4 py-3">Current</th><th className="px-4 py-3">P&L</th><th className="px-4 py-3 text-right">Action</th></tr></thead><tbody className="divide-y divide-white/5">{data.map((item: any) => { const pnl = Number(item.value) - (Number(item.invested_amount) || Number(item.value)); const pnlPercent = (Number(item.invested_amount) || 0) > 0 ? ((pnl / Number(item.invested_amount)) * 100).toFixed(1) : '0'; return (<tr key={item.id} className="hover:bg-white/5 transition-colors"><td className="px-4 py-3"><div className="text-white font-medium">{item.name}</div><div className="text-[10px] text-slate-500">{item.type} {item.nav && `NAV: ${item.nav}`}</div></td><td className="px-4 py-3">{formatCurrency(item.invested_amount || item.value)}</td><td className="px-4 py-3 text-white font-medium">{formatCurrency(item.value)}</td><td className={`px-4 py-3 font-medium ${pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{pnl >= 0 ? '+' : ''}{formatCurrency(pnl)} <span className="text-xs opacity-75">({pnlPercent}%)</span></td><td className="px-4 py-3 text-right flex justify-end gap-2"><button onClick={() => openEdit(item)} className="text-blue-400 hover:text-blue-300 p-1"><Pencil size={16}/></button><button onClick={() => onDelete('investments', item.id)} className="text-rose-500 hover:text-rose-400 p-1 rounded-md hover:bg-rose-500/10"><Trash2 size={16}/></button></td></tr>); })}</tbody></table></div></Card>
+            
+            {/* Modal for Add/Edit */}
             <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingId ? "Edit Investment" : "Add Investment"}><form onSubmit={handleAddOrUpdate} className="space-y-4"><div><label className="block text-xs font-medium text-slate-400 mb-1">Asset Class</label><select className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none" onChange={(e) => { handleChange('type', e.target.value); if (e.target.value !== 'Mutual Fund') { setFetchedNav(null); setSearchQuery(""); } }} value={formData.type}><option value="Mutual Fund">Mutual Fund (Auto-Fetch)</option><option value="Stocks">Stocks / Equity</option><option value="Govt Scheme">Govt Scheme (PPF/EPF)</option><option value="Commodity">Gold / Silver</option><option value="Crypto">Crypto</option><option value="Real Estate">Real Estate</option><option value="Cash">Cash / FD</option></select></div>{formData.type === 'Mutual Fund' ? (<><div className="relative"><label className="block text-xs font-medium text-slate-400 mb-1">Search Mutual Fund</label><div className="relative"><Search className="absolute left-3 top-2.5 text-slate-500" size={16} /><input type="text" placeholder="Type fund name" className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-9 pr-3 py-2 text-white outline-none" value={formData.name || searchQuery} onChange={(e) => { setSearchQuery(e.target.value); if (formData.schemeCode) setFormData({...formData, schemeCode: '', name: ''}); }} />{isSearching && <Loader2 className="absolute right-3 top-2.5 text-blue-500 animate-spin" size={16} />}</div>{mfResults.length > 0 && !formData.schemeCode && (<div className="absolute z-50 w-full bg-slate-800 border border-slate-700 rounded-lg mt-1 shadow-xl max-h-48 overflow-y-auto">{mfResults.map((fund: any) => (<div key={fund.schemeCode} className="p-2 hover:bg-slate-700 cursor-pointer text-xs text-slate-200 border-b border-slate-700/50" onClick={() => selectFund(fund)}>{fund.schemeName}</div>))}</div>)}</div>{formData.schemeCode && fetchedNav && (<div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex justify-between items-center"><span className="text-xs text-emerald-400 font-medium">Live NAV Fetched</span><span className="text-sm font-bold text-white">₹{fetchedNav}</span></div>)}<div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-medium text-slate-400 mb-1">Total Invested (₹)</label><input type="number" required className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none" onChange={(e) => handleChange('invested_amount', e.target.value)} value={formData.invested_amount}/></div><div><label className="block text-xs font-medium text-slate-400 mb-1">Units Held</label><input type="number" step="0.001" required className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none" onChange={(e) => handleChange('units', e.target.value)} value={formData.units}/></div></div></>) : (<><div><label className="block text-xs font-medium text-slate-400 mb-1">Asset Name</label><input type="text" required className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none" onChange={(e) => handleChange('name', e.target.value)} value={formData.name} /></div><div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-medium text-slate-400 mb-1">Invested Amount (₹)</label><input type="number" required className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none" onChange={(e) => handleChange('invested_amount', e.target.value)} value={formData.invested_amount}/></div><div><label className="block text-xs font-medium text-slate-400 mb-1">Current Value (₹)</label><input type="number" required className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none" onChange={(e) => handleChange('value', e.target.value)} value={formData.value}/></div></div></>)}<button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white py-2 rounded-lg font-medium mt-4">Save Investment</button></form></Modal>
+            
+            {/* Bulk Import Modal */}
+            <Modal isOpen={isImportModalOpen} onClose={() => { setIsImportModalOpen(false); setImportData([]); setImportPreview(null); }} title="Import Portfolio">
+                {!importPreview ? (
+                    <div className="space-y-6 text-center">
+                        <div className="border-2 border-dashed border-slate-600 rounded-2xl p-8 flex flex-col items-center justify-center hover:border-blue-500 transition-colors">
+                            <Upload className="w-12 h-12 text-slate-500 mb-4" />
+                            <p className="text-slate-300 font-medium mb-2">Upload Groww/Excel Statement</p>
+                            <p className="text-slate-500 text-xs mb-6">Supports .csv and .xlsx files. <br/>Ensure headers like 'Scheme Name' & 'Current Value' exist.</p>
+                            <label className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-lg cursor-pointer transition-colors font-medium text-sm">
+                                Select File
+                                <input type="file" className="hidden" accept=".csv, .xlsx, .xls" onChange={handleFileUpload} />
+                            </label>
+                        </div>
+                        {!xlsxReady && <p className="text-[10px] text-amber-500">Excel engine loading... wait a moment if .xlsx fails.</p>}
+                    </div>
+                ) : (
+                    <div className="space-y-6">
+                         <div className="bg-slate-800 p-4 rounded-xl space-y-2">
+                             <div className="flex justify-between text-sm"><span className="text-slate-400">Funds Found:</span><span className="text-white font-bold">{importPreview.count}</span></div>
+                             <div className="flex justify-between text-sm"><span className="text-slate-400">Total Invested:</span><span className="text-white font-bold">{formatCurrency(importPreview.totalInv)}</span></div>
+                             <div className="flex justify-between text-sm"><span className="text-slate-400">Total Current Value:</span><span className="text-emerald-400 font-bold">{formatCurrency(importPreview.totalCurr)}</span></div>
+                         </div>
+                         <button onClick={confirmImport} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-lg font-bold">Confirm Import</button>
+                    </div>
+                )}
+            </Modal>
         </div>
     );
 };
@@ -818,13 +961,21 @@ const AuthenticatedApp = ({ user, onLogout }: any) => {
 
     const handleAdd = async (table: string, payload: any) => {
         if (!supabase) return false;
-        try {
-            const { error } = await supabase.from(table).insert([{ ...payload, user_id: user.id }]);
-            if (error) throw error;
-            fetchData(); return true; 
-        } catch (e: any) {
-            alert(`Error: ${e.message}`);
-            return false;
+        if (Array.isArray(payload)) {
+            // Bulk Insert
+            const payloadWithUser = payload.map(item => ({ ...item, user_id: user.id }));
+            try {
+                const { error } = await supabase.from(table).insert(payloadWithUser);
+                if (error) throw error;
+                fetchData(); return true; 
+            } catch (e: any) { alert(`Error: ${e.message}`); return false; }
+        } else {
+            // Single Insert
+            try {
+                const { error } = await supabase.from(table).insert([{ ...payload, user_id: user.id }]);
+                if (error) throw error;
+                fetchData(); return true; 
+            } catch (e: any) { alert(`Error: ${e.message}`); return false; }
         }
     };
     
@@ -851,9 +1002,20 @@ const AuthenticatedApp = ({ user, onLogout }: any) => {
             alert(`Error: ${e.message}`);
         }
     };
+    
+    const handleDeleteAll = async (table: string) => {
+        if (!supabase) return;
+        try {
+            const { error } = await supabase.from(table).delete().neq('id', '00000000-0000-0000-0000-000000000000'); // Hack to delete all
+            if (error) throw error;
+            fetchData();
+        } catch (e:any) {
+            alert(`Error deleting all: ${e.message}`);
+        }
+    };
 
     const requestDelete = (table: string, id: string) => setDeleteConfirm({ open: true, table, id });
-    const commonProps = { data, userId: user.id, onDelete: requestDelete, onAdd: handleAdd, onUpdate: handleUpdate, safeMode: false };
+    const commonProps = { data, userId: user.id, onDelete: requestDelete, onAdd: handleAdd, onUpdate: handleUpdate, onBulkAdd: handleAdd, onDeleteAll: handleDeleteAll, safeMode: false };
 
     if (loading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-blue-500"><Loader2 className="animate-spin" size={32} /></div>;
 
@@ -882,7 +1044,7 @@ const AuthenticatedApp = ({ user, onLogout }: any) => {
         <div className="min-h-screen bg-slate-950 text-slate-200 font-sans flex print:bg-white print:text-black">
             {/* Desktop Sidebar */}
             <aside className="w-64 bg-slate-900 border-r border-slate-800 hidden md:flex flex-col print:hidden">
-                <div className="p-6 border-b border-slate-800 flex items-center space-x-2"><div className="bg-blue-600 p-2 rounded-lg"><LayoutDashboard size={20} className="text-white" /></div><div><h1 className="font-bold text-white text-lg tracking-tight">PFCC</h1><p className="text-xs text-slate-500">v3.9.5</p></div></div>
+                <div className="p-6 border-b border-slate-800 flex items-center space-x-2"><div className="bg-blue-600 p-2 rounded-lg"><LayoutDashboard size={20} className="text-white" /></div><div><h1 className="font-bold text-white text-lg tracking-tight">PFCC</h1><p className="text-xs text-slate-500">v4.1.0</p></div></div>
                 <nav className="flex-1 p-4 space-y-1 overflow-y-auto custom-scrollbar">
                     <NavContent />
                 </nav>
